@@ -13,6 +13,10 @@ __all__ = [
 
 JOB_PREPROCESSORS = []  # functions(job, scene) -> (ok,msg) or (True,'')
 
+# Global timer tracking (avoid setattr on WindowManager / Timer objects)
+_RQM_ACTIVE_TIMER = None
+_RQM_ACTIVE_RUN_ID = None
+
 def get_state(context):
     scn = context.scene
     if not hasattr(scn, 'rqm_state'): return None
@@ -122,55 +126,68 @@ def register_handlers():
         _on_render_cancel._rqm_tag = True
         bpy.app.handlers.render_cancel.append(_on_render_cancel)
 
-    # Frame post handler for stereo renaming (view before frame number)
-    if not _tagged(bpy.app.handlers.render_frame_post):
-        import re
-        def _on_frame_post(_):
-            scn = bpy.context.scene
-            st = getattr(scn, 'rqm_state', None)
-            if not st or not st.running or st.current_job_index < 0 or st.current_job_index >= len(st.queue):
-                return
-            try:
-                job = st.queue[st.current_job_index]
-            except Exception:
-                return
-            if not getattr(job, 'use_stereoscopy', False):
-                return
-            if not getattr(job, 'stereo_view_before_frame', False):
-                return
-            # Build base dir + prefix
-            try:
-                from .outputs import base_render_dir
-                from .utils import sanitize_component
-                base_dir = base_render_dir(job)
-                prefix = sanitize_component(job.file_basename or 'render')
-            except Exception:
-                return
-            if not os.path.isdir(base_dir):
-                return
-            # Pattern: prefix + digits + view(optional letters) + .ext  -> rename to prefix + view + ' ' + digits + .ext
-            # Avoid re-renaming: check already contains space before frame digits
-            pat = re.compile(rf'^{re.escape(prefix)}(\d+)([A-Za-z]+)(\.[^.]+)$')
+    # Stereo rename handler (per frame if supported else on render_post)
+    import re
+    def _stereo_rename():
+        scn = bpy.context.scene
+        st = getattr(scn, 'rqm_state', None)
+        if not st or not st.running or st.current_job_index < 0 or st.current_job_index >= len(st.queue):
+            return
+        try:
+            job = st.queue[st.current_job_index]
+        except Exception:
+            return
+        if not getattr(job, 'use_stereoscopy', False):
+            return
+        if not getattr(job, 'stereo_view_before_frame', False):
+            return
+        try:
+            from .outputs import base_render_dir
+            from .utils import sanitize_component
+            base_dir = base_render_dir(job)
+            prefix = sanitize_component(job.file_basename or 'render')
+        except Exception:
+            return
+        if not os.path.isdir(base_dir):
+            return
+        pat = re.compile(rf'^{re.escape(prefix)}(\d+)([A-Za-z]+)(\.[^.]+)$')
+        try:
             for fname in os.listdir(base_dir):
                 if not fname.startswith(prefix):
                     continue
-                if ' ' in fname:  # already processed (simple guard)
+                if ' ' in fname:
                     continue
                 m = pat.match(fname)
                 if not m:
                     continue
                 frame, view, ext = m.groups()
                 new_name = f"{prefix}{view} {frame}{ext}"
-                src = os.path.join(base_dir, fname)
-                dst = os.path.join(base_dir, new_name)
-                if os.path.exists(dst):  # don't overwrite
+                src = os.path.join(base_dir, fname); dst = os.path.join(base_dir, new_name)
+                if os.path.exists(dst):
                     continue
                 try:
                     os.rename(src, dst)
                 except Exception:
                     pass
-        _on_frame_post._rqm_tag = True
-        bpy.app.handlers.render_frame_post.append(_on_frame_post)
+        except Exception:
+            pass
+
+    # Prefer per-frame handler if available
+    has_render_frame_post = hasattr(bpy.app.handlers, 'render_frame_post')
+    target_list = None
+    if has_render_frame_post:
+        target_list = bpy.app.handlers.render_frame_post
+        tag_name = 'frame'
+    else:
+        # Fallback: rename after each full render (single frame still fine, animation less granular)
+        target_list = bpy.app.handlers.render_post
+        tag_name = 'post'
+
+    if not _tagged(target_list):
+        def _on_any(_):
+            _stereo_rename()
+        _on_any._rqm_tag = True
+        target_list.append(_on_any)
 
 # ---------------- Operators ----------------
 class AddFromCurrent(Operator):
@@ -308,33 +325,27 @@ class StartQueue(Operator):
     _timer_tag = '_rqm_queue_timer'  # legacy tag string retained for compatibility (no attribute set on Timer now)
 
     def _schedule_next(self, wm, st):
-        # Remove existing queued timer if we stored one previously
-        prev = getattr(wm, '_rqm_active_timer', None)
-        if prev is not None:
+        global _RQM_ACTIVE_TIMER, _RQM_ACTIVE_RUN_ID
+        # Remove existing queued timer if present
+        if _RQM_ACTIVE_TIMER is not None:
             try:
-                wm.event_timer_remove(prev)
+                wm.event_timer_remove(_RQM_ACTIVE_TIMER)
             except Exception:
                 pass
         timer = wm.event_timer_add(0.25, window=None)
-        # Store references on window manager (supported) rather than Timer object
-        wm._rqm_active_timer = timer
-        wm._rqm_active_timer_run_id = st.run_id
+        _RQM_ACTIVE_TIMER = timer
+        _RQM_ACTIVE_RUN_ID = st.run_id
         wm.modal_handler_add(self)
 
     def _cleanup_timer(self, wm):
-        prev = getattr(wm, '_rqm_active_timer', None)
-        if prev is not None:
+        global _RQM_ACTIVE_TIMER, _RQM_ACTIVE_RUN_ID
+        if _RQM_ACTIVE_TIMER is not None:
             try:
-                wm.event_timer_remove(prev)
+                wm.event_timer_remove(_RQM_ACTIVE_TIMER)
             except Exception:
                 pass
-        # Remove attributes to avoid stale references
-        for attr in ('_rqm_active_timer','_rqm_active_timer_run_id'):
-            if hasattr(wm, attr):
-                try:
-                    delattr(wm, attr)
-                except Exception:
-                    pass
+        _RQM_ACTIVE_TIMER = None
+        _RQM_ACTIVE_RUN_ID = None
 
     def execute(self, context):
         st = get_state(context)
@@ -362,10 +373,9 @@ class StartQueue(Operator):
             return {'CANCELLED'}
         if not st.running:
             return {'FINISHED'}
-        # Guard: stale timer from previous run
-        # Cancel if this timer does not match the active run id we stored
-        wm = context.window_manager
-        run_id = getattr(wm, '_rqm_active_timer_run_id', None)
+        # Guard: stale timer from previous run using module globals
+        from . import queue_ops as _qmod  # self-module reference for globals
+        run_id = _qmod._RQM_ACTIVE_RUN_ID
         if run_id is not None and run_id != st.run_id:
             return {'CANCELLED'}
         if st.current_job_index >= len(st.queue):
