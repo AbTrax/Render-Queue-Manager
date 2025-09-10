@@ -10,9 +10,10 @@ if (-not $Version) {
     $rootInit = Join-Path $PSScriptRoot '..' '__init__.py'
     $content = Get-Content $rootInit -Raw
     if ($content -match "version': \(([^\)]+)\)") {
-        $tuple = $Matches[1] -replace '[^0-9,]',''
+        $tuple = $Matches[1] -replace '[^0-9,]', ''
         $Version = ($tuple -split ',')[0..2] -join '.'
-    } else {
+    }
+    else {
         throw "Could not parse version from __init__.py"
     }
 }

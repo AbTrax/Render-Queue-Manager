@@ -8,7 +8,7 @@ register/unregister to the modular submodules for clarity.
 bl_info = {
 	'name': 'Render Queue Manager',
 	'author': 'Xnom3d',
-	'version': (1, 10, 5),  # operator tooltips
+	'version': (1, 10, 6),  # operator tooltips
 	'blender': (3, 0, 0),
 	'location': 'Properties > Output > Render Queue Manager',
 	'description': 'Queue renders with per-job folders, compositor outputs, stereoscopy, and extension hooks.',
