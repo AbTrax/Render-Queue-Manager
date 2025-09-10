@@ -32,6 +32,13 @@ def engine_items(self, context):
         items.append(('CYCLES','Cycles','Cycles Render Engine'))
     return items or [('BLENDER_EEVEE','Eevee','Eevee Render Engine')]
 
+def marker_items(self, context):
+    scn = bpy.data.scenes.get(self.scene_name) if getattr(self, 'scene_name', None) else None
+    if not scn:
+        return [('','<no scene>','')]
+    items = [(m.name, m.name, f'Frame {m.frame}') for m in scn.timeline_markers]
+    return items or [('','<no markers>','')]
+
 class RQM_CompOutput(PropertyGroup):
     enabled: BoolProperty(name='Enabled', default=True)
     node_name: StringProperty(name='File Output Node', default='')
@@ -62,10 +69,12 @@ class RQM_Job(PropertyGroup):
     frame_start: IntProperty(name='Start frame', default=1, min=0)
     frame_end: IntProperty(name='End frame', default=1, min=0)
     link_marker: BoolProperty(name='Use start marker', default=False)
-    marker_name: StringProperty(name='Start marker name', default='')
+    marker_name: StringProperty(name='Start marker name', default='')  # stored
+    marker_picker: EnumProperty(name='Start marker', items=marker_items, description='Timeline marker for start')
     marker_offset: IntProperty(name='Start offset', default=0)
     link_end_marker: BoolProperty(name='Use end marker', default=False)
-    end_marker_name: StringProperty(name='End marker name', default='')
+    end_marker_name: StringProperty(name='End marker name', default='')  # stored
+    end_marker_picker: EnumProperty(name='End marker', items=marker_items, description='Timeline marker for end')
     end_marker_offset: IntProperty(name='End offset', default=-1)
     zero_index_numbering: BoolProperty(name='(deprecated) 0-based numbering', default=True, options={'HIDDEN'})
     # Output

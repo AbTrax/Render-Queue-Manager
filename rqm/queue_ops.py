@@ -7,7 +7,7 @@ from .utils import sanitize_component, ensure_dir
 __all__ = [
     'apply_job','get_state',
     'AddFromCurrent','AddCamerasInScene','RemoveJob','ClearQueue','MoveJob',
-    'StartQueue','StopQueue','OutputAdd','OutputRemove','OutputMove',
+    'StartQueue','StopQueue','OutputAdd','OutputRemove','OutputMove','ApplyActiveJob',
     'register_handlers','JOB_PREPROCESSORS'
 ]
 
@@ -19,6 +19,12 @@ def get_state(context):
     return scn.rqm_state
 
 def apply_job(job: RQM_Job):
+    # Map picker selections to stored names (if enums present)
+    if getattr(job, 'marker_picker', ''):
+        job.marker_name = job.marker_picker
+    if getattr(job, 'end_marker_picker', ''):
+        job.end_marker_name = job.end_marker_picker
+
     scn = bpy.data.scenes.get(job.scene_name)
     if not scn: return False, f"Scene '{job.scene_name}' not found."
     try:
@@ -394,9 +400,27 @@ class OutputMove(Operator):
             job.comp_outputs.move(idx, idx+1); job.comp_outputs_index += 1; return {'FINISHED'}
         return {'CANCELLED'}
 
+class ApplyActiveJob(Operator):
+    bl_idname = 'rqm.apply_active_job'
+    bl_label = 'Apply Now'
+    bl_description = 'Apply the active job settings (useful after changing marker offsets)'
+    bl_options = {'REGISTER'}
+    def execute(self, context):
+        st = get_state(context)
+        if st is None or not (0 <= st.active_index < len(st.queue)):
+            self.report({'WARNING'}, 'No active job')
+            return {'CANCELLED'}
+        job = st.queue[st.active_index]
+        ok,msg = apply_job(job)
+        if not ok:
+            self.report({'ERROR'}, msg)
+            return {'CANCELLED'}
+        self.report({'INFO'}, 'Job applied')
+        return {'FINISHED'}
+
 CLASSES = (
     AddFromCurrent, AddCamerasInScene, RemoveJob, ClearQueue, MoveJob,
-    StartQueue, StopQueue, OutputAdd, OutputRemove, OutputMove
+    StartQueue, StopQueue, OutputAdd, OutputRemove, OutputMove, ApplyActiveJob
 )
 
 def register():
