@@ -249,6 +249,19 @@ class StartQueue(Operator):
     bl_label = 'Start Render Queue'
     bl_description = 'Begin processing jobs sequentially until complete or stopped.'
     bl_options = {'REGISTER'}
+    _timer_tag = '_rqm_queue_timer'
+
+    def _schedule_next(self, wm, st):
+        # Remove existing timer first
+        for t in getattr(wm, 'event_timers', []):
+            if getattr(t, self._timer_tag, False):
+                wm.event_timer_remove(t)
+        timer = wm.event_timer_add(0.25, window=None)
+        setattr(timer, self._timer_tag, True)
+        # Store run id reference on timer so old timers self-cancel if mismatched
+        timer._rqm_run_id = st.run_id
+        wm.modal_handler_add(self)
+
     def execute(self, context):
         st = get_state(context)
         if st is None:
@@ -261,31 +274,56 @@ class StartQueue(Operator):
             self.report({'WARNING'}, 'No jobs in the queue')
             return {'CANCELLED'}
         register_handlers()
+        st.run_id += 1
         st.running = True; st.current_job_index = 0; st.render_in_progress = False
-        context.window_manager.modal_handler_add(self)
+        self._schedule_next(context.window_manager, st)
         self.report({'INFO'}, 'Render queue started')
         return {'RUNNING_MODAL'}
+
     def modal(self, context, event):
+        if event.type != 'TIMER':
+            return {'PASS_THROUGH'}
         st = get_state(context)
-        if st is None: return {'CANCELLED'}
-        if not st.running: return {'FINISHED'}
+        if st is None:
+            return {'CANCELLED'}
+        if not st.running:
+            return {'FINISHED'}
+        # Guard: stale timer from previous run
+        if getattr(event, 'timer', None) and hasattr(event.timer, '_rqm_run_id'):
+            if event.timer._rqm_run_id != st.run_id:
+                return {'CANCELLED'}
         if st.current_job_index >= len(st.queue):
             st.running = False; st.current_job_index = -1
             self.report({'INFO'}, 'Render queue finished')
             return {'FINISHED'}
-        if st.render_in_progress: return {'PASS_THROUGH'}
+        if st.render_in_progress:
+            return {'PASS_THROUGH'}
         job = st.queue[st.current_job_index]
-        ok,msg = apply_job(job)
+        ok, msg = apply_job(job)
         if not ok:
             self.report({'WARNING'}, f'Skipping job: {msg}')
             st.current_job_index += 1
             return {'PASS_THROUGH'}
         st.render_in_progress = True
+        # Render invocation: attempt to find a suitable window/area if context invalid
         try:
-            if job.use_animation:
-                bpy.ops.render.render('INVOKE_DEFAULT', animation=True)
+            # Prefer using override context to avoid dependency on current active area being Properties
+            win = bpy.context.window
+            area = None
+            for a in win.screen.areas:
+                if a.type in {'VIEW_3D','PROPERTIES'}:
+                    area = a; break
+            if area is not None:
+                override = {'window': win, 'screen': win.screen, 'area': area, 'scene': bpy.context.scene}
+                if job.use_animation:
+                    bpy.ops.render.render(override, animation=True)
+                else:
+                    bpy.ops.render.render(override, write_still=True)
             else:
-                bpy.ops.render.render('INVOKE_DEFAULT', write_still=True)
+                if job.use_animation:
+                    bpy.ops.render.render('INVOKE_DEFAULT', animation=True)
+                else:
+                    bpy.ops.render.render('INVOKE_DEFAULT', write_still=True)
         except Exception as e:
             self.report({'ERROR'}, f'Render failed: {e}')
             st.render_in_progress = False; st.current_job_index += 1

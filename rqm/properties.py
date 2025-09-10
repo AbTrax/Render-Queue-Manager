@@ -90,6 +90,9 @@ class RQM_State(PropertyGroup):
     running: BoolProperty(default=False)
     current_job_index: IntProperty(default=-1)
     render_in_progress: BoolProperty(default=False)
+    # Internal: increments each time a new queue run starts so any stray timers from
+    # a previous run can detect mismatch and abort safely.
+    run_id: IntProperty(default=0, options={'HIDDEN'})
 
 CLASSES = (RQM_CompOutput, RQM_Job, RQM_State)
 
