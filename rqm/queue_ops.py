@@ -305,17 +305,20 @@ class StartQueue(Operator):
     bl_label = 'Start Render Queue'
     bl_description = 'Begin processing jobs sequentially until complete or stopped.'
     bl_options = {'REGISTER'}
-    _timer_tag = '_rqm_queue_timer'
+    _timer_tag = '_rqm_queue_timer'  # legacy tag string retained for compatibility (no attribute set on Timer now)
 
     def _schedule_next(self, wm, st):
-        # Remove existing timer first
-        for t in getattr(wm, 'event_timers', []):
-            if getattr(t, self._timer_tag, False):
-                wm.event_timer_remove(t)
+        # Remove existing queued timer if we stored one previously
+        prev = getattr(wm, '_rqm_active_timer', None)
+        if prev is not None:
+            try:
+                wm.event_timer_remove(prev)
+            except Exception:
+                pass
         timer = wm.event_timer_add(0.25, window=None)
-        setattr(timer, self._timer_tag, True)
-        # Store run id reference on timer so old timers self-cancel if mismatched
-        timer._rqm_run_id = st.run_id
+        # Store references on window manager (supported) rather than Timer object
+        wm._rqm_active_timer = timer
+        wm._rqm_active_timer_run_id = st.run_id
         wm.modal_handler_add(self)
 
     def execute(self, context):
@@ -345,9 +348,11 @@ class StartQueue(Operator):
         if not st.running:
             return {'FINISHED'}
         # Guard: stale timer from previous run
-        if getattr(event, 'timer', None) and hasattr(event.timer, '_rqm_run_id'):
-            if event.timer._rqm_run_id != st.run_id:
-                return {'CANCELLED'}
+        # Cancel if this timer does not match the active run id we stored
+        wm = context.window_manager
+        run_id = getattr(wm, '_rqm_active_timer_run_id', None)
+        if run_id is not None and run_id != st.run_id:
+            return {'CANCELLED'}
         if st.current_job_index >= len(st.queue):
             st.running = False; st.current_job_index = -1
             self.report({'INFO'}, 'Render queue finished')
