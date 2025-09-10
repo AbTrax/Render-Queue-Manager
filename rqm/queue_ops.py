@@ -427,25 +427,42 @@ class StartQueue(Operator):
             st.current_job_index += 1
             return {'PASS_THROUGH'}
         st.render_in_progress = True
-        # Render invocation: attempt to find a suitable window/area if context invalid
+        # Render invocation with safe context override.
         try:
-            # Prefer using override context to avoid dependency on current active area being Properties
             win = bpy.context.window
-            area = None
-            for a in win.screen.areas:
-                if a.type in {'VIEW_3D','PROPERTIES'}:
-                    area = a; break
-            if area is not None:
-                override = {'window': win, 'screen': win.screen, 'area': area, 'scene': bpy.context.scene}
-                if job.use_animation:
-                    bpy.ops.render.render(override, animation=True)
-                else:
-                    bpy.ops.render.render(override, write_still=True)
-            else:
-                if job.use_animation:
-                    bpy.ops.render.render('INVOKE_DEFAULT', animation=True)
-                else:
-                    bpy.ops.render.render('INVOKE_DEFAULT', write_still=True)
+            chosen_area = None
+            if win and win.screen:
+                for a in win.screen.areas:
+                    if a.type in {'VIEW_3D', 'PROPERTIES', 'IMAGE_EDITOR'}:
+                        chosen_area = a
+                        break
+            render_kwargs = {'animation': True} if job.use_animation else {'write_still': True}
+            did_render = False
+            # Blender 3.2+ provides temp_override; in 4.x this is preferred.
+            if chosen_area is not None and hasattr(bpy.context, 'temp_override'):
+                try:
+                    with bpy.context.temp_override(window=win, area=chosen_area, scene=bpy.context.scene):
+                        bpy.ops.render.render(**render_kwargs)
+                        did_render = True
+                except Exception:
+                    pass
+            if not did_render:
+                # Fallback: standard operator call (avoid passing context dict directly to operator)
+                try:
+                    bpy.ops.render.render(**render_kwargs)
+                    did_render = True
+                except Exception:
+                    # Final fallback: invoke default (UI) context which may schedule render in UI thread
+                    try:
+                        if job.use_animation:
+                            bpy.ops.render.render('INVOKE_DEFAULT', animation=True)
+                        else:
+                            bpy.ops.render.render('INVOKE_DEFAULT', write_still=True)
+                        did_render = True
+                    except Exception:
+                        pass
+            if not did_render:
+                raise RuntimeError('Unable to start render with any context override path')
         except Exception as e:
             self.report({'ERROR'}, f'Render failed: {e}')
             st.render_in_progress = False; st.current_job_index += 1
