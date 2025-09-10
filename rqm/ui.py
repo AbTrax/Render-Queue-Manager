@@ -64,21 +64,57 @@ class RQM_PT_Panel(Panel):
             col.separator()
             col.prop(job, 'use_animation')
             if job.use_animation:
-                col.prop(job, 'frame_start')
-                col.prop(job, 'frame_end')
+                sub = col.box()
+                sub.label(text='Frame Range / Markers')
+                rowf = sub.row(align=True)
+                rowf.prop(job, 'frame_start')
+                rowf.prop(job, 'frame_end')
+                sub.prop(job, 'link_marker')
+                if job.link_marker:
+                    r = sub.row(align=True)
+                    r.prop(job, 'marker_name')
+                    r.prop(job, 'marker_offset')
+                sub.prop(job, 'link_end_marker')
+                if job.link_end_marker:
+                    r2 = sub.row(align=True)
+                    r2.prop(job, 'end_marker_name')
+                    r2.prop(job, 'end_marker_offset')
             col.separator()
+            col.label(text='Standard Render Output', icon='FILE_FOLDER')
             col.prop(job, 'file_format')
             col.prop(job, 'output_path')
             col.prop(job, 'file_basename')
             col.separator()
+            col.label(text='Compositor Outputs', icon='NODE_COMPOSITING')
             col.prop(job, 'use_comp_outputs')
             if job.use_comp_outputs:
+                col.prop(job, 'comp_outputs_non_blocking')
                 rowo = col.row(align=True)
                 rowo.operator('rqm.output_add', text='', icon='ADD')
                 rowo.operator('rqm.output_remove', text='', icon='REMOVE')
                 rowo.operator('rqm.output_move', text='', icon='TRIA_UP').direction='UP'
                 rowo.operator('rqm.output_move', text='', icon='TRIA_DOWN').direction='DOWN'
                 col.template_list('RQM_UL_Outputs','', job, 'comp_outputs', job, 'comp_outputs_index', rows=3)
+                if 0 <= job.comp_outputs_index < len(job.comp_outputs):
+                    out = job.comp_outputs[job.comp_outputs_index]
+                    od = col.box()
+                    od.label(text='Selected Output Settings')
+                    od.prop(out, 'enabled')
+                    scn_for_job = bpy.data.scenes.get(job.scene_name)
+                    if scn_for_job and scn_for_job.node_tree:
+                        od.prop_search(out, 'node_name', scn_for_job.node_tree, 'nodes', text='File Output Node')
+                    else:
+                        od.prop(out, 'node_name')
+                    od.prop(out, 'create_if_missing')
+                    od.prop(out, 'override_node_format')
+                    od.separator()
+                    od.label(text='Folder Logic', icon='FILE_FOLDER')
+                    od.prop(out, 'base_source')
+                    if out.base_source == 'FROM_FILE':
+                        od.prop(out, 'base_file')
+                    od.prop(out, 'use_node_named_subfolder')
+                    od.prop(out, 'extra_subfolder')
+                    od.prop(out, 'ensure_dirs')
         layout.separator()
         row = layout.row(align=True)
         if not st.running:

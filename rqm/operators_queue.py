@@ -167,6 +167,7 @@ class RQM_OT_StartQueue(Operator):
             return {'CANCELLED'}
         if st.current_job_index >= len(st.queue):
             st.running = False
+            st.current_job_index = -1
             self.report({'INFO'}, 'Queue complete.')
             return {'FINISHED'}
         if st.render_in_progress:
