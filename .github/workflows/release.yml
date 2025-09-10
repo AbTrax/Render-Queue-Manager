@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -51,7 +52,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: addon-zip
-          path: dist/*.zip
+          path: render-queue-manager-v${{ steps.vars.outputs.version }}.zip
 
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -59,6 +60,6 @@ jobs:
           name: Render Queue Manager ${{ steps.vars.outputs.version }}
           tag_name: ${{ steps.vars.outputs.tag }}
           body_path: notes.txt
-          files: dist/*.zip
+          files: render-queue-manager-v${{ steps.vars.outputs.version }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
