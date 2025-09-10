@@ -69,3 +69,4 @@ class RQM_State(PropertyGroup):
     running: BoolProperty(default=False)
     current_job_index: IntProperty(default=-1)
     render_in_progress: BoolProperty(default=False)
+    job_filter: StringProperty(name='Filter Jobs', default='')

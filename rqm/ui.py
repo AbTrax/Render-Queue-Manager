@@ -1,34 +1,33 @@
-"""UI Lists and Panels for the add-on."""
+"""UI Lists and Panels for the add-on (legacy layout parity)."""
 from __future__ import annotations
 import bpy
 from bpy.types import UIList, Panel
-from bpy.props import StringProperty
 from .state import get_state
 
 __all__ = ['RQM_UL_Queue','RQM_UL_Outputs','RQM_PT_Panel']
 
 class RQM_UL_Queue(UIList):
-    bl_idname = 'RQM_UL_queue'
+    bl_idname = 'RQM_UL_Queue'
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT','COMPACT'}:
             row = layout.row(align=True)
-            row.prop(item, 'name', text='', emboss=False)
-            row.label(text=item.camera_name or '⟨no cam⟩')
-            seg = f"{item.res_x}x{item.res_y}@{item.percent}%"
-            row.label(text=seg)
+            row.prop(item, 'name', text='', emboss=False, icon='RENDER_RESULT')
+            cam_part = item.camera_name or '<no cam>'
+            row.label(text=f"{item.scene_name} / {cam_part}")
         else:
-            layout.label(text=item.name)
+            layout.alignment = 'CENTER'
+            layout.label(text='', icon='RENDER_RESULT')
 
 class RQM_UL_Outputs(UIList):
-    bl_idname = 'RQM_UL_outputs'
+    bl_idname = 'RQM_UL_Outputs'
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT','COMPACT'}:
             row = layout.row(align=True)
             row.prop(item, 'enabled', text='')
-            row.prop(item, 'node_name', text='', emboss=True)
-            row.label(text=item.base_source)
+            row.prop(item, 'node_name', text='', emboss=True, icon='NODE_COMPOSITING')
         else:
-            layout.label(text=item.node_name or '<unnamed>')
+            layout.alignment = 'CENTER'
+            layout.label(text='', icon='NODE_COMPOSITING')
 
 class RQM_PT_Panel(Panel):
     bl_label = 'Render Queue Manager'
@@ -40,88 +39,106 @@ class RQM_PT_Panel(Panel):
         layout = self.layout
         st = get_state(context)
         if st is None:
-            layout.label(text='State missing. Re-register add-on.', icon='ERROR')
+            box = layout.box()
+            box.label(text='Render Queue Manager not initialized.', icon='ERROR')
+            box.label(text='Try disabling & re-enabling the add-on.')
             return
+
         row = layout.row(align=True)
         row.operator('rqm.add_from_current', icon='ADD')
         row.operator('rqm.add_cameras_in_scene', icon='OUTLINER_OB_CAMERA')
         row.operator('rqm.clear_queue', icon='TRASH')
-        layout.template_list('RQM_UL_Queue','', st, 'queue', st, 'active_index', rows=6)
+
+        layout.template_list('RQM_UL_Queue', '', st, 'queue', st, 'active_index', rows=6)
+
         if 0 <= st.active_index < len(st.queue):
             job = st.queue[st.active_index]
+            scn_for_job = bpy.data.scenes.get(job.scene_name)
+
             box = layout.box()
+            box.prop(job, 'name')
+
+            row = box.row()
+            row.prop(job, 'scene_name', text='Scene')
+            row.prop(job, 'camera_name', text='Camera')
+
+            row = box.row()
+            row.prop(job, 'engine', text='Render Engine')
+
             col = box.column(align=True)
-            col.prop(job, 'name')
-            col.prop(job, 'scene_name')
-            col.prop(job, 'camera_name')
-            col.prop(job, 'engine')
-            col.separator()
-            col.label(text='Resolution:')
-            rowr = col.row(align=True)
-            rowr.prop(job, 'res_x')
-            rowr.prop(job, 'res_y')
-            col.prop(job, 'percent')
+            col.label(text='Resolution')
+            rr = col.row(align=True)
+            rr.prop(job, 'res_x'); rr.prop(job, 'res_y'); rr.prop(job, 'percent')
+
             col.separator()
             col.prop(job, 'use_animation')
             if job.use_animation:
-                sub = col.box()
-                sub.label(text='Frame Range / Markers')
-                rowf = sub.row(align=True)
-                rowf.prop(job, 'frame_start')
-                rowf.prop(job, 'frame_end')
-                sub.prop(job, 'link_marker')
+                rr = col.row(align=True)
+                rr.prop(job, 'frame_start'); rr.prop(job, 'frame_end')
+
+                col.separator(); col.label(text='Use timeline markers (optional)', icon='MARKER_HLT')
+                col.prop(job, 'link_marker')
                 if job.link_marker:
-                    r = sub.row(align=True)
-                    r.prop(job, 'marker_name')
+                    r = col.row(align=True)
+                    if scn_for_job:
+                        r.prop_search(job, 'marker_name', scn_for_job, 'timeline_markers', text='Start Marker')
+                    else:
+                        r.prop(job, 'marker_name', text='Start Marker')
                     r.prop(job, 'marker_offset')
-                sub.prop(job, 'link_end_marker')
+                col.prop(job, 'link_end_marker')
                 if job.link_end_marker:
-                    r2 = sub.row(align=True)
-                    r2.prop(job, 'end_marker_name')
+                    r2 = col.row(align=True)
+                    if scn_for_job:
+                        r2.prop_search(job, 'end_marker_name', scn_for_job, 'timeline_markers', text='End Marker')
+                    else:
+                        r2.prop(job, 'end_marker_name', text='End Marker')
                     r2.prop(job, 'end_marker_offset')
+
             col.separator()
             col.label(text='Standard Render Output', icon='FILE_FOLDER')
-            col.prop(job, 'file_format')
-            col.prop(job, 'output_path')
-            col.prop(job, 'file_basename')
+            col.prop(job, 'file_format'); col.prop(job, 'output_path'); col.prop(job, 'file_basename')
+
             col.separator()
-            col.label(text='Compositor Outputs', icon='NODE_COMPOSITING')
+            col.label(text='Compositor Outputs (optional)', icon='NODE_COMPOSITING')
             col.prop(job, 'use_comp_outputs')
             if job.use_comp_outputs:
                 col.prop(job, 'comp_outputs_non_blocking')
-                rowo = col.row(align=True)
-                rowo.operator('rqm.output_add', text='', icon='ADD')
-                rowo.operator('rqm.output_remove', text='', icon='REMOVE')
-                rowo.operator('rqm.output_move', text='', icon='TRIA_UP').direction='UP'
-                rowo.operator('rqm.output_move', text='', icon='TRIA_DOWN').direction='DOWN'
-                col.template_list('RQM_UL_Outputs','', job, 'comp_outputs', job, 'comp_outputs_index', rows=3)
+                row = col.row()
+                row.template_list('RQM_UL_Outputs', '', job, 'comp_outputs', job, 'comp_outputs_index', rows=3)
+                col2 = row.column(align=True)
+                col2.operator('rqm.output_add', icon='ADD', text='')
+                col2.operator('rqm.output_remove', icon='REMOVE', text='')
+                col2.separator()
+                up = col2.operator('rqm.output_move', icon='TRIA_UP', text=''); up.direction='UP'
+                dn = col2.operator('rqm.output_move', icon='TRIA_DOWN', text=''); dn.direction='DOWN'
+
                 if 0 <= job.comp_outputs_index < len(job.comp_outputs):
                     out = job.comp_outputs[job.comp_outputs_index]
-                    od = col.box()
-                    od.label(text='Selected Output Settings')
-                    od.prop(out, 'enabled')
-                    scn_for_job = bpy.data.scenes.get(job.scene_name)
+                    sub = col.box()
+                    sub.prop(out, 'enabled')
                     if scn_for_job and scn_for_job.node_tree:
-                        od.prop_search(out, 'node_name', scn_for_job.node_tree, 'nodes', text='File Output Node')
+                        sub.prop_search(out, 'node_name', scn_for_job.node_tree, 'nodes', text='File Output Node')
                     else:
-                        od.prop(out, 'node_name')
-                    od.prop(out, 'create_if_missing')
-                    od.prop(out, 'override_node_format')
-                    od.separator()
-                    od.label(text='Folder Logic', icon='FILE_FOLDER')
-                    od.prop(out, 'base_source')
+                        sub.prop(out, 'node_name', text='File Output Node')
+                    sub.prop(out, 'create_if_missing')
+                    sub.prop(out, 'override_node_format')
+
+                    sub.separator(); sub.label(text='Save location', icon='FILE_FOLDER')
+                    sub.prop(out, 'base_source', text='Base folder')
                     if out.base_source == 'FROM_FILE':
-                        od.prop(out, 'base_file')
-                    od.prop(out, 'use_node_named_subfolder')
-                    od.prop(out, 'extra_subfolder')
-                    od.prop(out, 'ensure_dirs')
+                        sub.prop(out, 'base_file')
+                    sub.prop(out, 'use_node_named_subfolder')
+                    sub.prop(out, 'extra_subfolder')
+                    sub.prop(out, 'ensure_dirs')
+
         layout.separator()
         row = layout.row(align=True)
         if not st.running:
             row.operator('rqm.start_queue', icon='RENDER_ANIMATION')
         else:
             row.operator('rqm.stop_queue', icon='CANCEL')
+
         if st.running and st.current_job_index >= 0:
-            layout.label(text=f'Running job {st.current_job_index+1}/{len(st.queue)}')
+            layout.label(text=f'Running… Job {st.current_job_index + 1}/{len(st.queue)}')
         else:
             layout.label(text='Idle')

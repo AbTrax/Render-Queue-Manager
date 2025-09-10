@@ -11,6 +11,11 @@ from .utils import _sanitize_component, _ensure_dir
 from .comp import base_render_dir
 from .jobs import apply_job
 
+# ---- Local item callbacks (avoid lambda for Blender EnumProperty) ----
+def _operator_scene_items(self, context):
+    items = [(s.name, s.name, '') for s in bpy.data.scenes]
+    return items or [('','<no scenes>','')]
+
 __all__ = [
     'RQM_OT_AddFromCurrent','RQM_OT_AddCamerasInScene','RQM_OT_RemoveJob','RQM_OT_ClearQueue',
     'RQM_OT_MoveJob','RQM_OT_StartQueue','RQM_OT_StopQueue'
@@ -56,7 +61,7 @@ class RQM_OT_AddCamerasInScene(Operator):
     bl_idname = 'rqm.add_cameras_in_scene'
     bl_label = 'Add Jobs for all cameras in a scene'
     bl_options = {'REGISTER','UNDO'}
-    scene_name: EnumProperty(name='Scene', items=lambda self, ctx: [(s.name,s.name,'') for s in bpy.data.scenes])
+    scene_name: EnumProperty(name='Scene', items=_operator_scene_items)
     def invoke(self, context, event):
         if not self.scene_name and context.scene:
             self.scene_name = context.scene.name
