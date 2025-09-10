@@ -1,0 +1,17 @@
+# Blender / Python cache
+__pycache__/
+*.py[cod]
+*.blend1
+*.blend2
+
+# Packaging
+/build/
+/dist/
+/*.zip
+
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
