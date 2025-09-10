@@ -14,8 +14,38 @@ __all__ = [
 JOB_PREPROCESSORS = []  # functions(job, scene) -> (ok,msg) or (True,'')
 
 # Global timer tracking (avoid setattr on WindowManager / Timer objects)
+# Legacy versions stored a reference on the WindowManager as _rqm_active_timer / _rqm_active_run_id
+# to simplify cleanup. New approach uses module globals (Blender can recreate WindowManager objects
+# between sessions, so setattr was fragile). We keep a migration shim so existing sessions that still
+# have the old attributes won't crash with AttributeError.
 _RQM_ACTIVE_TIMER = None
 _RQM_ACTIVE_RUN_ID = None
+
+def _migrate_legacy_timer(wm):
+    """If an older loaded version stored timer attributes on the WindowManager, migrate them.
+
+    This prevents AttributeErrors when user updates the add-on without reloading Blender, where
+    old operator instances may still reference the previous attribute-based storage.
+    """
+    global _RQM_ACTIVE_TIMER, _RQM_ACTIVE_RUN_ID
+    migrated = False
+    # Timer
+    if _RQM_ACTIVE_TIMER is None and hasattr(wm, '_rqm_active_timer'):
+        try:
+            _RQM_ACTIVE_TIMER = getattr(wm, '_rqm_active_timer', None)
+            delattr(wm, '_rqm_active_timer')
+            migrated = True
+        except Exception:
+            pass
+    # Run id
+    if _RQM_ACTIVE_RUN_ID is None and hasattr(wm, '_rqm_active_run_id'):
+        try:
+            _RQM_ACTIVE_RUN_ID = getattr(wm, '_rqm_active_run_id', None)
+            delattr(wm, '_rqm_active_run_id')
+            migrated = True
+        except Exception:
+            pass
+    return migrated
 
 def get_state(context):
     scn = context.scene
@@ -326,6 +356,8 @@ class StartQueue(Operator):
 
     def _schedule_next(self, wm, st):
         global _RQM_ACTIVE_TIMER, _RQM_ACTIVE_RUN_ID
+        # Migrate any legacy attributes if user updated add-on without restarting Blender
+        _migrate_legacy_timer(wm)
         # Remove existing queued timer if present
         if _RQM_ACTIVE_TIMER is not None:
             try:
@@ -339,6 +371,8 @@ class StartQueue(Operator):
 
     def _cleanup_timer(self, wm):
         global _RQM_ACTIVE_TIMER, _RQM_ACTIVE_RUN_ID
+        # Also migrate (harmless if nothing to migrate) so we pick up legacy timer ref for removal
+        _migrate_legacy_timer(wm)
         if _RQM_ACTIVE_TIMER is not None:
             try:
                 wm.event_timer_remove(_RQM_ACTIVE_TIMER)
@@ -518,3 +552,17 @@ def register():
 def unregister():
     for c in reversed(CLASSES):
         bpy.utils.unregister_class(c)
+    # Ensure any active timer is cleaned up if addon is disabled
+    try:
+        from . import queue_ops as _qmod
+        if _qmod._RQM_ACTIVE_TIMER is not None:
+            wm = bpy.context.window_manager if getattr(bpy.context, 'window_manager', None) else None
+            if wm is not None:
+                try:
+                    wm.event_timer_remove(_qmod._RQM_ACTIVE_TIMER)
+                except Exception:
+                    pass
+        _qmod._RQM_ACTIVE_TIMER = None
+        _qmod._RQM_ACTIVE_RUN_ID = None
+    except Exception:
+        pass

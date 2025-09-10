@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.10] - 2025-09-11
+
+### Fixed (Timer / Modal Queue)
+
+- Eliminated AttributeError on updated sessions: migrated legacy `WindowManager._rqm_active_timer` storage to module globals.
+- Added safe cleanup and unregister timer removal to prevent orphaned timers after finishing or disabling the add-on.
+
 ## [1.10.8] - 2025-09-11
 
 ### Added (Markers UI)
