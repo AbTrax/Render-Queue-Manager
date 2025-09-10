@@ -74,6 +74,7 @@ class MainPanel(Panel):
             sr = col.row(align=True); sr.prop(job, 'use_stereoscopy', text='Enable Stereo')
             if job.use_stereoscopy:
                 col.prop(job, 'stereo_views_format')
+                col.prop(job, 'stereo_view_before_frame')
             col.separator(); col.label(text='Compositor Outputs', icon='NODE_COMPOSITING')
             col.prop(job, 'use_comp_outputs')
             if job.use_comp_outputs:

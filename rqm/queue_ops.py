@@ -122,6 +122,56 @@ def register_handlers():
         _on_render_cancel._rqm_tag = True
         bpy.app.handlers.render_cancel.append(_on_render_cancel)
 
+    # Frame post handler for stereo renaming (view before frame number)
+    if not _tagged(bpy.app.handlers.render_frame_post):
+        import re
+        def _on_frame_post(_):
+            scn = bpy.context.scene
+            st = getattr(scn, 'rqm_state', None)
+            if not st or not st.running or st.current_job_index < 0 or st.current_job_index >= len(st.queue):
+                return
+            try:
+                job = st.queue[st.current_job_index]
+            except Exception:
+                return
+            if not getattr(job, 'use_stereoscopy', False):
+                return
+            if not getattr(job, 'stereo_view_before_frame', False):
+                return
+            # Build base dir + prefix
+            try:
+                from .outputs import base_render_dir
+                from .utils import sanitize_component
+                base_dir = base_render_dir(job)
+                prefix = sanitize_component(job.file_basename or 'render')
+            except Exception:
+                return
+            if not os.path.isdir(base_dir):
+                return
+            # Pattern: prefix + digits + view(optional letters) + .ext  -> rename to prefix + view + ' ' + digits + .ext
+            # Avoid re-renaming: check already contains space before frame digits
+            pat = re.compile(rf'^{re.escape(prefix)}(\d+)([A-Za-z]+)(\.[^.]+)$')
+            for fname in os.listdir(base_dir):
+                if not fname.startswith(prefix):
+                    continue
+                if ' ' in fname:  # already processed (simple guard)
+                    continue
+                m = pat.match(fname)
+                if not m:
+                    continue
+                frame, view, ext = m.groups()
+                new_name = f"{prefix}{view} {frame}{ext}"
+                src = os.path.join(base_dir, fname)
+                dst = os.path.join(base_dir, new_name)
+                if os.path.exists(dst):  # don't overwrite
+                    continue
+                try:
+                    os.rename(src, dst)
+                except Exception:
+                    pass
+        _on_frame_post._rqm_tag = True
+        bpy.app.handlers.render_frame_post.append(_on_frame_post)
+
 # ---------------- Operators ----------------
 class AddFromCurrent(Operator):
     bl_idname = 'rqm.add_from_current'

@@ -92,6 +92,8 @@ class RQM_Job(PropertyGroup):
         ('STEREO_3D','Stereo 3D','Combined left/right'),
         ('MULTIVIEW','Multi-View Images','Separate images per view')
     ], default='STEREO_3D')
+    # Stereo naming tweak: place view before frame (renderLeft 0001.png instead of render0001Left.png)
+    stereo_view_before_frame: BoolProperty(name='View before frame (rename)', default=True, description='When enabled, after each frame the addon renames files like base0001Left.png to baseLeft 0001.png')
 
 class RQM_State(PropertyGroup):
     queue: CollectionProperty(type=RQM_Job)
