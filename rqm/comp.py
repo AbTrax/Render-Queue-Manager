@@ -1,19 +1,37 @@
-import bpy, os
-from .utils import sanitize_component, sanitize_subpath, tokens, ensure_dir, scene_output_dir
+"""Compositor output and path resolution logic (ported from monolithic version)."""
+from __future__ import annotations
+import os
+import bpy
+from .utils import (
+    _sanitize_component, _sanitize_subpath, _tokens,
+    _ensure_dir, _scene_output_dir, _valid_node_format
+)
 from .properties import RQM_CompOutput, RQM_Job
 
-__all__ = ['sync_one_output']
+__all__ = [
+    'job_root_dir','base_render_dir','comp_root_dir',
+    'get_file_output_node','resolve_base_dir','sync_one_output'
+]
 
-VALID_NODE_FORMATS = {'PNG','OPEN_EXR','OPEN_EXR_MULTILAYER','JPEG','BMP','TIFF'}
+def job_root_dir(job: RQM_Job) -> str:
+    root = bpy.path.abspath(job.output_path)
+    return os.path.join(root, _sanitize_component(job.name or 'job'))
 
-def _valid_node_format(fmt: str) -> str:
-    return fmt if fmt in VALID_NODE_FORMATS else 'PNG'
+def base_render_dir(job: RQM_Job) -> str:
+    return os.path.join(job_root_dir(job), 'base')
+
+def comp_root_dir(job: RQM_Job) -> str:
+    return os.path.join(job_root_dir(job), 'comp')
 
 def get_file_output_node(scn, out: RQM_CompOutput):
-    if not scn: return None, 'No scene.'
-    if not scn.use_nodes: scn.use_nodes = True
+    if not scn:
+        return None, 'No scene.'
+    if not scn.use_nodes:
+        scn.use_nodes = True
     nt = scn.node_tree
-    if not nt: return None, 'Scene has no node tree.'
+    if not nt:
+        return None, 'Scene has no node tree.'
+
     node = None
     if out.node_name:
         n = nt.nodes.get(out.node_name)
@@ -26,36 +44,28 @@ def get_file_output_node(scn, out: RQM_CompOutput):
         while nt.nodes.get(name):
             i += 1; name = f'{base}_{i}'
         node.name = name
-        node.location = (400,200)
+        node.location = (400, 200)
         out.node_name = node.name
     if not node:
         return None, "Pick a File Output node (or enable 'Create if missing')."
     return node, None
 
-def job_root_dir(job: RQM_Job):
-    root = bpy.path.abspath(job.output_path)
-    return os.path.join(root, sanitize_component(job.name or 'job'))
-
-def comp_root_dir(job: RQM_Job):
-    return os.path.join(job_root_dir(job), 'comp')
-
-def base_render_dir(job: RQM_Job):
-    return os.path.join(job_root_dir(job), 'base')
-
 def resolve_base_dir(scn, job: RQM_Job, out: RQM_CompOutput, node_name: str):
     if out.base_source == 'JOB_OUTPUT':
         base_dir = comp_root_dir(job)
     elif out.base_source == 'SCENE_OUTPUT':
-        base_dir = scene_output_dir(scn)
+        base_dir = _scene_output_dir(scn)
     else:
         if not out.base_file:
-            return None, 'No file chosen.'
+            return None, "You chose 'Folder of a chosen file' but no file was picked."
         base_dir = os.path.dirname(bpy.path.abspath(out.base_file))
+
     if out.use_node_named_subfolder:
-        base_dir = os.path.join(base_dir, sanitize_component(node_name or 'Composite'))
+        node_sub = _sanitize_component(node_name or 'Composite')
+        base_dir = os.path.join(base_dir, node_sub)
     if out.extra_subfolder.strip():
-        raw = tokens(out.extra_subfolder, scn, job.name, job.camera_name, node_name=node_name).strip()
-        sub = sanitize_subpath(raw)
+        raw = _tokens(out.extra_subfolder, scn, job.name, job.camera_name, node_name=node_name).strip()
+        sub = _sanitize_subpath(raw)
         if sub:
             base_dir = os.path.join(base_dir, sub)
     return base_dir, None
@@ -66,25 +76,27 @@ def _ensure_min_slot(node, fallback_name: str):
 
 def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
     node, err = get_file_output_node(scn, out)
-    if not node: return False, err
+    if not node:
+        return False, err
     base_dir, err = resolve_base_dir(scn, job, out, node.name)
-    if err: return False, err
+    if err:
+        return False, err
     base_dir = bpy.path.abspath(base_dir or '//')
     try:
         node.base_path = base_dir
     except Exception as e:
-        return False, f'Could not set base path: {e}'
+        return False, f"Couldn't set File Output base path: {e}".strip()
     if out.ensure_dirs:
-        ok,e2 = ensure_dir(base_dir)
+        ok, e2 = _ensure_dir(base_dir)
         if not ok:
-            return False, f"Couldn't create folder '{base_dir}': {e2}"
-    if out.override_node_format and hasattr(node,'format'):
+            return False, f"Couldn't create folder '{base_dir}': {e2}".strip()
+    if out.override_node_format and hasattr(node, 'format'):
         try:
             node.format.file_format = _valid_node_format(job.file_format or 'PNG')
         except Exception:
             pass
-    safe_job = sanitize_component(job.name or 'job')
-    safe_base = sanitize_component(job.file_basename or 'render')
+    safe_job = _sanitize_component(job.name or 'job')
+    safe_base = _sanitize_component(job.file_basename or 'render')
     target_prefix = f'{safe_job}_{safe_base}'
     _ensure_min_slot(node, target_prefix)
     try:
