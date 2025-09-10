@@ -321,6 +321,21 @@ class StartQueue(Operator):
         wm._rqm_active_timer_run_id = st.run_id
         wm.modal_handler_add(self)
 
+    def _cleanup_timer(self, wm):
+        prev = getattr(wm, '_rqm_active_timer', None)
+        if prev is not None:
+            try:
+                wm.event_timer_remove(prev)
+            except Exception:
+                pass
+        # Remove attributes to avoid stale references
+        for attr in ('_rqm_active_timer','_rqm_active_timer_run_id'):
+            if hasattr(wm, attr):
+                try:
+                    delattr(wm, attr)
+                except Exception:
+                    pass
+
     def execute(self, context):
         st = get_state(context)
         if st is None:
@@ -355,6 +370,8 @@ class StartQueue(Operator):
             return {'CANCELLED'}
         if st.current_job_index >= len(st.queue):
             st.running = False; st.current_job_index = -1
+            # Cleanup timer when finished
+            self._cleanup_timer(context.window_manager)
             self.report({'INFO'}, 'Render queue finished')
             return {'FINISHED'}
         if st.render_in_progress:
@@ -399,6 +416,12 @@ class StopQueue(Operator):
         st = get_state(context)
         if st is None: return {'CANCELLED'}
         st.running = False; st.current_job_index = -1; st.render_in_progress = False
+        # Cleanup any active timer
+        try:
+            starter = StartQueue
+            starter()._cleanup_timer(context.window_manager)
+        except Exception:
+            pass
         self.report({'INFO'}, 'Queue stopped')
         return {'FINISHED'}
 
