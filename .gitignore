@@ -4,10 +4,14 @@ __pycache__/
 *.blend1
 *.blend2
 
-# Packaging
-/build/
+# Packaging artifacts
 /dist/
 /*.zip
+/*.tar.gz
+/*.sha256.txt
+
+# Keep build scripts (do not ignore scripts/)
+!scripts/
 
 # VSCode
 .vscode/

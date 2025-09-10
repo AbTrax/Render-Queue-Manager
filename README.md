@@ -114,6 +114,33 @@ MIT. See `LICENSE`.
 ## 🔢 Versioning
 Semantic-like tuple in `bl_info['version']`: (MAJOR, MINOR, PATCH). Patch = fixes / packaging, Minor = new features, Major = breaking changes.
 
+## 🛠️ Building / Packaging
+You can build the distributable zip in three ways:
+
+PowerShell (auto-detect version):
+```
+pwsh scripts/build.ps1
+```
+
+Specify version override:
+```
+pwsh scripts/build.ps1 -Version 1.10.6
+```
+
+Cross-platform Python script:
+```
+python scripts/package_addon.py
+```
+
+Override version:
+```
+python scripts/package_addon.py --version 1.10.6
+```
+
+Output: `render-queue-manager-vX.Y.Z.zip` at repo root and staging under `dist/`.
+
+GitHub Actions: Push a tag (`git tag -a v1.10.6 -m "Release" && git push origin v1.10.6`). Workflow builds, attaches zip, and creates release notes with commit diff since previous tag.
+
 ---
 
 Made for production batch rendering and extension. Enjoy.

@@ -1,0 +1,64 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: vars
+        run: |
+          ref="${GITHUB_REF##*/}"
+          echo "tag=$ref" >> $GITHUB_OUTPUT
+          ver=${ref#v}
+          echo "version=$ver" >> $GITHUB_OUTPUT
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Package addon
+        run: |
+          python scripts/package_addon.py --version ${{ steps.vars.outputs.version }}
+          ls -l dist
+          ls -l *.zip
+
+      - name: Generate release notes (diff from previous tag)
+        id: notes
+        run: |
+          CURRENT=${{ steps.vars.outputs.tag }}
+          PREV=$(git tag --sort=-creatordate | grep -v "$CURRENT" | head -n1 || true)
+          if [ -n "$PREV" ]; then
+            echo "Changes since $PREV" > notes.txt
+            git log --oneline "$PREV".."$CURRENT" >> notes.txt
+          else
+            echo "Initial release" > notes.txt
+          fi
+          echo "file=notes.txt" >> $GITHUB_OUTPUT
+
+      - name: Upload artifact (zip)
+        uses: actions/upload-artifact@v4
+        with:
+          name: addon-zip
+          path: dist/*.zip
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Render Queue Manager ${{ steps.vars.outputs.version }}
+          tag_name: ${{ steps.vars.outputs.tag }}
+          body_path: notes.txt
+          files: dist/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
