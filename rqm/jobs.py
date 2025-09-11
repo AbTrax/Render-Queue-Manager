@@ -64,16 +64,18 @@ def apply_job(job: RQM_Job):
             end_frame = int(job.frame_end)
         if end_frame < start_frame:
             end_frame = start_frame
-        length = (end_frame - start_frame) + 1
-        scn.frame_start = 0
-        scn.frame_end = max(0, length - 1)
-        scn.frame_current = 0
+        # Respect original frame numbering so filenames / data match expected frame numbers.
+        scn.frame_start = start_frame
+        scn.frame_end = end_frame
+        scn.frame_current = start_frame
     else:
-        scn.frame_current = 0
+        # For single frame renders, ensure current frame is the requested start (or 1 fallback)
+        scn.frame_current = int(job.frame_start) if getattr(job, 'frame_start', None) else scn.frame_current
     safe_base = _sanitize_component(job.file_basename or 'render')
     scn.render.image_settings.file_format = job.file_format or 'PNG'
     bdir = base_render_dir(job)
     _ensure_dir(bdir)
+    # Ensure trailing separator then base name (Blender appends frame + view identifiers automatically)
     scn.render.filepath = os.path.join(bdir, '') + safe_base
     if job.use_comp_outputs and len(job.comp_outputs) > 0:
         errors = []
