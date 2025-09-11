@@ -9,7 +9,11 @@ from bpy.props import (
 from bpy.types import PropertyGroup  # type: ignore
 from .utils import scene_items, camera_items, engine_items, FILE_FORMAT_ITEMS, _sanitize_component
 
-__all__ = ['RQM_CompOutput','RQM_Job','RQM_State']
+__all__ = ['RQM_CompOutput','RQM_Job','RQM_State','RQM_Tag']
+
+class RQM_Tag(PropertyGroup):
+    name: StringProperty(name='Tag')
+    enabled: BoolProperty(name='Use', default=True)
 
 class RQM_CompOutput(PropertyGroup):
     enabled: BoolProperty(name='Enabled', default=True,
@@ -43,6 +47,8 @@ class RQM_Job(PropertyGroup):
     use_animation: BoolProperty(name='Render animation', default=False)
     frame_start: IntProperty(name='Start frame', default=1, min=0)
     frame_end: IntProperty(name='End frame', default=1, min=0)
+    preserve_frame_numbers: BoolProperty(name='Preserve frame numbers', default=True,
+        description='If enabled, renders use the original frame numbers (e.g. 20-30). If disabled, frames are remapped to start at 0 for this job.')
 
     link_marker: BoolProperty(name='Use start marker', default=False)
     marker_name: StringProperty(name='Start marker name', default='')
@@ -74,6 +80,11 @@ class RQM_Job(PropertyGroup):
         description='Optional extra view identifiers (comma or space separated). Example: "ALT QA" -> produces _ALT and _QA tags')
     stereo_keep_plain: BoolProperty(name='Keep plain fallback', default=True,
         description='If off, plain (untagged) files are deleted once all view-tagged files for that frame exist')
+    stereo_tags: CollectionProperty(type=RQM_Tag)
+    stereo_tags_index: IntProperty(default=0)
+    use_tag_collection: BoolProperty(name='Use tag list', default=False,
+        description='If enabled, only the tags in the list (checked) are used instead of the free-text field')
+    enabled: BoolProperty(name='Enabled', default=True, description='If off, this job will be skipped in the queue')
 
 class RQM_State(PropertyGroup):
     queue: CollectionProperty(type=RQM_Job)

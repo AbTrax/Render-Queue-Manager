@@ -44,7 +44,7 @@ def apply_job(job: RQM_Job):
     except Exception:
         pass
     if job.use_animation:
-        # Derive source start/end (could be marker-linked) then remap to 0-based range for consistent file numbering
+        # Preserve actual frame numbers (no remap) so disparate ranges (e.g., 3-10 then 20-30) keep original numbering
         if job.link_marker:
             if not job.marker_name:
                 return False, 'Start marker enabled but not selected.'
@@ -65,10 +65,9 @@ def apply_job(job: RQM_Job):
             src_end = int(job.frame_end)
         if src_end < src_start:
             src_end = src_start
-        length = (src_end - src_start) + 1
-        scn.frame_start = 0
-        scn.frame_end = max(0, length - 1)
-        scn.frame_current = 0
+        scn.frame_start = src_start
+        scn.frame_end = src_end
+        scn.frame_current = src_start
     else:
         # Single still: always frame 0 for consistent 0000 numbering
         scn.frame_start = 0

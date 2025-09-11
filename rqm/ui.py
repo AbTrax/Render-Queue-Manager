@@ -4,16 +4,25 @@ import bpy  # type: ignore
 from bpy.types import UIList, Panel
 from .state import get_state
 
-__all__ = ['RQM_UL_Queue','RQM_UL_Outputs','RQM_PT_Panel']
+__all__ = ['RQM_UL_Queue','RQM_UL_Outputs','RQM_UL_Tags','RQM_PT_Panel']
 
 class RQM_UL_Queue(UIList):
     bl_idname = 'RQM_UL_Queue'
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT','COMPACT'}:
             row = layout.row(align=True)
+            # Enable toggle
+            if hasattr(item, 'enabled'):
+                row.prop(item, 'enabled', text='')
+            # Name
             row.prop(item, 'name', text='', emboss=False, icon='RENDER_RESULT')
             cam_part = item.camera_name or '<no cam>'
-            row.label(text=f"{item.scene_name} / {cam_part}")
+            row.label(text=f"{item.scene_name}:{cam_part}")
+            # Duplicate & delete inline
+            dup = row.operator('rqm.duplicate_job', text='', icon='DUPLICATE')
+            dup.index = index
+            rem = row.operator('rqm.remove_job', text='', icon='X')
+            rem.index = index
         else:
             layout.alignment = 'CENTER'
             layout.label(text='', icon='RENDER_RESULT')
@@ -24,10 +33,22 @@ class RQM_UL_Outputs(UIList):
         if self.layout_type in {'DEFAULT','COMPACT'}:
             row = layout.row(align=True)
             row.prop(item, 'enabled', text='')
-            row.prop(item, 'node_name', text='', emboss=True, icon='NODE_COMPOSITING')
+            # show as shorter label + editable text button
+            split = row.split(factor=0.65, align=True)
+            split.prop(item, 'node_name', text='', emboss=True, icon='NODE_COMPOSITING')
         else:
             layout.alignment = 'CENTER'
             layout.label(text='', icon='NODE_COMPOSITING')
+
+class RQM_UL_Tags(UIList):
+    bl_idname = 'RQM_UL_Tags'
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT','COMPACT'}:
+            row = layout.row(align=True)
+            row.prop(item, 'enabled', text='')
+            row.prop(item, 'name', text='', emboss=True, icon='VIEW_CAMERA')
+        else:
+            layout.label(text=item.name)
 
 class RQM_PT_Panel(Panel):
     bl_label = 'Render Queue Manager'
@@ -44,10 +65,14 @@ class RQM_PT_Panel(Panel):
             box.label(text='Try disabling & re-enabling the add-on.')
             return
 
-        row = layout.row(align=True)
-        row.operator('rqm.add_from_current', icon='ADD')
-        row.operator('rqm.add_cameras_in_scene', icon='OUTLINER_OB_CAMERA')
-        row.operator('rqm.clear_queue', icon='TRASH')
+        header = layout.row(align=True)
+        header.operator('rqm.add_from_current', icon='ADD')
+        header.operator('rqm.add_cameras_in_scene', icon='OUTLINER_OB_CAMERA')
+        header.operator('rqm.clear_queue', icon='TRASH')
+        header.operator('rqm.enable_all_jobs', icon='CHECKMARK')
+        header.operator('rqm.disable_all_jobs', icon='CANCEL')
+        dupop = header.operator('rqm.duplicate_job', icon='DUPLICATE')
+        dupop.index = st.active_index
 
         layout.template_list('RQM_UL_Queue', '', st, 'queue', st, 'active_index', rows=6)
 
@@ -56,7 +81,10 @@ class RQM_PT_Panel(Panel):
             scn_for_job = bpy.data.scenes.get(job.scene_name)
 
             box = layout.box()
-            box.prop(job, 'name')
+            top_row = box.row(align=True)
+            if hasattr(job, 'enabled'):
+                top_row.prop(job, 'enabled', text='')
+            top_row.prop(job, 'name', text='Name')
 
             row = box.row()
             row.prop(job, 'scene_name', text='Scene')
@@ -70,47 +98,46 @@ class RQM_PT_Panel(Panel):
             rr = col.row(align=True)
             rr.prop(job, 'res_x'); rr.prop(job, 'res_y'); rr.prop(job, 'percent')
 
-            col.separator()
-            col.prop(job, 'use_animation')
+            col.separator(); col.prop(job, 'use_animation')
             if job.use_animation:
-                rr = col.row(align=True)
-                rr.prop(job, 'frame_start'); rr.prop(job, 'frame_end')
-
-                col.separator(); col.label(text='Use timeline markers (optional)', icon='MARKER_HLT')
+                fr = col.row(align=True)
+                fr.prop(job, 'frame_start'); fr.prop(job, 'frame_end')
+                col.separator(); col.label(text='Timeline markers', icon='MARKER_HLT')
                 col.prop(job, 'link_marker')
                 if job.link_marker:
                     r = col.row(align=True)
                     if scn_for_job:
-                        r.prop_search(job, 'marker_name', scn_for_job, 'timeline_markers', text='Start Marker')
+                        r.prop_search(job, 'marker_name', scn_for_job, 'timeline_markers', text='Start')
                     else:
-                        r.prop(job, 'marker_name', text='Start Marker')
+                        r.prop(job, 'marker_name', text='Start')
                     r.prop(job, 'marker_offset')
                 col.prop(job, 'link_end_marker')
                 if job.link_end_marker:
                     r2 = col.row(align=True)
                     if scn_for_job:
-                        r2.prop_search(job, 'end_marker_name', scn_for_job, 'timeline_markers', text='End Marker')
+                        r2.prop_search(job, 'end_marker_name', scn_for_job, 'timeline_markers', text='End')
                     else:
-                        r2.prop(job, 'end_marker_name', text='End Marker')
+                        r2.prop(job, 'end_marker_name', text='End')
                     r2.prop(job, 'end_marker_offset')
 
-            col.separator()
-            col.label(text='Standard Render Output', icon='FILE_FOLDER')
+            col.separator(); col.label(text='Standard Output', icon='FILE_FOLDER')
             col.prop(job, 'file_format'); col.prop(job, 'output_path'); col.prop(job, 'file_basename')
 
-            col.separator()
-            col.label(text='Stereoscopy', icon='CAMERA_STEREO')
+            col.separator(); col.label(text='Stereoscopy', icon='CAMERA_STEREO')
             col.prop(job, 'use_stereoscopy')
             if getattr(job, 'use_stereoscopy', False):
                 if hasattr(job, 'stereo_views_format'):
                     col.prop(job, 'stereo_views_format', text='Views')
-                if hasattr(job, 'stereo_extra_tags'):
-                    col.prop(job, 'stereo_extra_tags')
-                if hasattr(job, 'stereo_keep_plain'):
-                    col.prop(job, 'stereo_keep_plain')
+                col.prop(job, 'stereo_extra_tags')
+                col.prop(job, 'stereo_keep_plain')
+                tag_row = col.row(align=True)
+                tag_row.prop(job, 'use_tag_collection', text='Use Tag List')
+                tag_row.operator('rqm.detect_tags', text='', icon='VIEWZOOM')
+                if job.use_tag_collection:
+                    tag_box = col.box()
+                    tag_box.template_list('RQM_UL_Tags', '', job, 'stereo_tags', job, 'stereo_tags_index', rows=3)
 
-            col.separator()
-            col.label(text='Compositor Outputs (optional)', icon='NODE_COMPOSITING')
+            col.separator(); col.label(text='Compositor Outputs', icon='NODE_COMPOSITING')
             col.prop(job, 'use_comp_outputs')
             if job.use_comp_outputs:
                 col.prop(job, 'comp_outputs_non_blocking')
@@ -122,7 +149,6 @@ class RQM_PT_Panel(Panel):
                 col2.separator()
                 up = col2.operator('rqm.output_move', icon='TRIA_UP', text=''); up.direction='UP'
                 dn = col2.operator('rqm.output_move', icon='TRIA_DOWN', text=''); dn.direction='DOWN'
-
                 if 0 <= job.comp_outputs_index < len(job.comp_outputs):
                     out = job.comp_outputs[job.comp_outputs_index]
                     sub = col.box()
@@ -133,9 +159,8 @@ class RQM_PT_Panel(Panel):
                         sub.prop(out, 'node_name', text='File Output Node')
                     sub.prop(out, 'create_if_missing')
                     sub.prop(out, 'override_node_format')
-
                     sub.separator(); sub.label(text='Save location', icon='FILE_FOLDER')
-                    sub.prop(out, 'base_source', text='Base folder')
+                    sub.prop(out, 'base_source', text='Base')
                     if out.base_source == 'FROM_FILE':
                         sub.prop(out, 'base_file')
                     sub.prop(out, 'use_node_named_subfolder')
@@ -143,12 +168,11 @@ class RQM_PT_Panel(Panel):
                     sub.prop(out, 'ensure_dirs')
 
         layout.separator()
-        row = layout.row(align=True)
+        controls = layout.row(align=True)
         if not st.running:
-            row.operator('rqm.start_queue', icon='RENDER_ANIMATION')
+            controls.operator('rqm.start_queue', icon='RENDER_ANIMATION')
         else:
-            row.operator('rqm.stop_queue', icon='CANCEL')
-
+            controls.operator('rqm.stop_queue', icon='CANCEL')
         if st.running and st.current_job_index >= 0:
             layout.label(text=f'Running… Job {st.current_job_index + 1}/{len(st.queue)}')
         else:

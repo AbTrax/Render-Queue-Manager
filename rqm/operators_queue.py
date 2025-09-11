@@ -18,7 +18,8 @@ def _operator_scene_items(self, context):
 
 __all__ = [
     'RQM_OT_AddFromCurrent','RQM_OT_AddCamerasInScene','RQM_OT_RemoveJob','RQM_OT_ClearQueue',
-    'RQM_OT_MoveJob','RQM_OT_StartQueue','RQM_OT_StopQueue'
+    'RQM_OT_MoveJob','RQM_OT_StartQueue','RQM_OT_StopQueue',
+    'RQM_OT_DuplicateJob','RQM_OT_EnableAllJobs','RQM_OT_DisableAllJobs'
 ]
 
 class RQM_OT_AddFromCurrent(Operator):
@@ -140,6 +141,75 @@ class RQM_OT_ClearQueue(Operator):
         self.report({'INFO'}, 'Queue cleared.')
         return {'FINISHED'}
 
+class RQM_OT_DuplicateJob(Operator):
+    bl_idname = 'rqm.duplicate_job'
+    bl_label = 'Duplicate Job'
+    bl_options = {'REGISTER','UNDO'}
+    index: IntProperty(default=-1)
+    def execute(self, context):
+        st = get_state(context)
+        if st is None or not st.queue:
+            return {'CANCELLED'}
+        src_idx = self.index if self.index >= 0 else st.active_index
+        if not (0 <= src_idx < len(st.queue)):
+            return {'CANCELLED'}
+        src = st.queue[src_idx]
+        dst = st.queue.add()
+        # Copy simple attributes
+        for attr in [
+            'scene_name','camera_name','engine','res_x','res_y','percent',
+            'use_animation','frame_start','frame_end','link_marker','marker_name','marker_offset',
+            'link_end_marker','end_marker_name','end_marker_offset','file_format','output_path','file_basename',
+            'use_comp_outputs','comp_outputs_non_blocking','use_stereoscopy','stereo_views_format','stereo_extra_tags',
+            'stereo_keep_plain','use_tag_collection','enabled'
+        ]:
+            if hasattr(dst, attr) and hasattr(src, attr):
+                setattr(dst, attr, getattr(src, attr))
+        # Copy compositor outputs
+        if hasattr(src, 'comp_outputs'):
+            for out in src.comp_outputs:
+                new_out = dst.comp_outputs.add()
+                for a in ['enabled','node_name','create_if_missing','base_source','base_file','use_node_named_subfolder','extra_subfolder','ensure_dirs','override_node_format']:
+                    if hasattr(out, a):
+                        setattr(new_out, a, getattr(out, a))
+        # Copy tag collection
+        if hasattr(src, 'stereo_tags'):
+            for t in src.stereo_tags:
+                nt = dst.stereo_tags.add()
+                nt.name = t.name; nt.enabled = t.enabled
+        dst.name = src.name + '_dup'
+        st.active_index = len(st.queue)-1
+        self.report({'INFO'}, 'Job duplicated.')
+        return {'FINISHED'}
+
+class RQM_OT_EnableAllJobs(Operator):
+    bl_idname = 'rqm.enable_all_jobs'
+    bl_label = 'Enable All Jobs'
+    bl_options = {'REGISTER','UNDO'}
+    def execute(self, context):
+        st = get_state(context)
+        if st is None:
+            return {'CANCELLED'}
+        for j in st.queue:
+            if hasattr(j, 'enabled'):
+                j.enabled = True
+        self.report({'INFO'}, 'All jobs enabled.')
+        return {'FINISHED'}
+
+class RQM_OT_DisableAllJobs(Operator):
+    bl_idname = 'rqm.disable_all_jobs'
+    bl_label = 'Disable All Jobs'
+    bl_options = {'REGISTER','UNDO'}
+    def execute(self, context):
+        st = get_state(context)
+        if st is None:
+            return {'CANCELLED'}
+        for j in st.queue:
+            if hasattr(j, 'enabled'):
+                j.enabled = False
+        self.report({'INFO'}, 'All jobs disabled.')
+        return {'FINISHED'}
+
 class RQM_OT_MoveJob(Operator):
     bl_idname = 'rqm.move_job'
     bl_label = 'Move Job'
@@ -184,6 +254,9 @@ class RQM_OT_StartQueue(Operator):
             register_handlers()
         except Exception:
             pass
+        # Advance past any disabled jobs
+        while st.current_job_index < len(st.queue) and not getattr(st.queue[st.current_job_index], 'enabled', True):
+            st.current_job_index += 1
         if st.current_job_index >= len(st.queue):
             st.running = False
             st.current_job_index = -1

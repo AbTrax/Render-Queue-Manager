@@ -4,8 +4,11 @@ import bpy
 from bpy.types import Operator
 from bpy.props import EnumProperty
 from .state import get_state
+import os, re, glob
+from .comp import base_render_dir
+from .properties import RQM_Job
 
-__all__ = ['RQM_OT_Output_Add','RQM_OT_Output_Remove','RQM_OT_Output_Move']
+__all__ = ['RQM_OT_Output_Add','RQM_OT_Output_Remove','RQM_OT_Output_Move','RQM_OT_DetectTags']
 
 class RQM_OT_Output_Add(Operator):
     bl_idname = 'rqm.output_add'
@@ -63,3 +66,38 @@ class RQM_OT_Output_Move(Operator):
             job.comp_outputs_index += 1
             return {'FINISHED'}
         return {'CANCELLED'}
+
+class RQM_OT_DetectTags(Operator):
+    bl_idname = 'rqm.detect_tags'
+    bl_label = 'Detect View Tags'
+    bl_options = {'REGISTER'}
+    def execute(self, context):
+        st = get_state(context)
+        if not (st and 0 <= st.active_index < len(st.queue)):
+            return {'CANCELLED'}
+        job: RQM_Job = st.queue[st.active_index]
+        bdir = base_render_dir(job)
+        if not os.path.isdir(bdir):
+            self.report({'WARNING'}, 'No base output directory yet.')
+            return {'CANCELLED'}
+        # scan for patterns *_TAG <frame>.ext
+        found = []
+        tag_rx = re.compile(r'^.+?_([A-Za-z0-9]+)\s+\d+\.[^.]+$')
+        for fp in glob.glob(os.path.join(bdir, '*')):
+            name = os.path.basename(fp)
+            m = tag_rx.match(name)
+            if m:
+                t = m.group(1).upper()
+                if t not in {'L','R'} and t not in found:
+                    found.append(t)
+        # merge with existing collection
+        existing = {t.name.upper() for t in job.stereo_tags}
+        for t in found:
+            if t not in existing:
+                nt = job.stereo_tags.add(); nt.name = t; nt.enabled = True
+        if found:
+            job.use_tag_collection = True
+            self.report({'INFO'}, f"Detected tags: {', '.join(found)}")
+        else:
+            self.report({'INFO'}, 'No additional tags detected.')
+        return {'FINISHED'}

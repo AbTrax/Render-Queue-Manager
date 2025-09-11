@@ -56,16 +56,16 @@ _EXT_MAP = {
     'PNG': '.png','JPEG': '.jpg','BMP': '.bmp','TIFF': '.tif','OPEN_EXR': '.exr'
 }
 _view_pat_variants = [
-    # base + view word + frame (SceneCamLeft0001.png)
-    re.compile(r'^(?P<base>.+?)(?P<view>Left|Right|[A-Za-z]{2,})?(?P<frame>\d+)(?P<ext>\.[^.]+)$', re.IGNORECASE),
-    # base + frame + _ + letter/multi view (SceneCam0001_L.png / SceneCam0001_ALT.png)
-    re.compile(r'^(?P<base>.+?)(?P<frame>\d+)[_-](?P<view>[A-Za-z]+)(?P<ext>\.[^.]+)$', re.IGNORECASE),
-    # base + frame + letter view appended (SceneCam0001L.png)
+    # base + view word/tag + frame (SceneCamLeft0001.png / SceneCamALT20001.png)
+    re.compile(r'^(?P<base>.+?)(?P<view>Left|Right|[A-Za-z0-9]{2,})?(?P<frame>\d+)(?P<ext>\.[^.]+)$', re.IGNORECASE),
+    # base + frame + _ + view tag (SceneCam0001_L.png / SceneCam0001_ALT2.png)
+    re.compile(r'^(?P<base>.+?)(?P<frame>\d+)[_-](?P<view>[A-Za-z0-9]+)(?P<ext>\.[^.]+)$', re.IGNORECASE),
+    # base + frame + single letter view appended (SceneCam0001L.png)
     re.compile(r'^(?P<base>.+?)(?P<frame>\d+)(?P<view>[A-Za-z])(?P<ext>\.[^.]+)$', re.IGNORECASE),
-    # base + _ + view + frame (SceneCam_L0001.png / SceneCam_ALT0001.png)
-    re.compile(r'^(?P<base>.+?)[_-](?P<view>[A-Za-z]+)(?P<frame>\d+)(?P<ext>\.[^.]+)$', re.IGNORECASE),
-    # base + word view + _ + frame (SceneCamLeft_0001.png / SceneCamALT_0001.png)
-    re.compile(r'^(?P<base>.+?)(?P<view>[A-Za-z]+)[_-](?P<frame>\d+)(?P<ext>\.[^.]+)$', re.IGNORECASE),
+    # base + _ + view + frame (SceneCam_L0001.png / SceneCam_ALT20001.png)
+    re.compile(r'^(?P<base>.+?)[_-](?P<view>[A-Za-z0-9]+)(?P<frame>\d+)(?P<ext>\.[^.]+)$', re.IGNORECASE),
+    # base + view + _ + frame (SceneCamLeft_0001.png / SceneCamALT2_0001.png)
+    re.compile(r'^(?P<base>.+?)(?P<view>[A-Za-z0-9]+)[_-](?P<frame>\d+)(?P<ext>\.[^.]+)$', re.IGNORECASE),
 ]
 _plain_frame_pat = re.compile(r'^(?P<base>.+?)(?P<frame>\d{3,})(?P<ext>\.[^.]+)$')
 _dup_token_sep = re.compile(r'[_\.]+')
