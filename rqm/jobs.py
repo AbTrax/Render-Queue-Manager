@@ -44,37 +44,46 @@ def apply_job(job: RQM_Job):
     except Exception:
         pass
     if job.use_animation:
+        # Derive source start/end (could be marker-linked) then remap to 0-based range for consistent file numbering
         if job.link_marker:
             if not job.marker_name:
                 return False, 'Start marker enabled but not selected.'
             ms = scn.timeline_markers.get(job.marker_name)
             if not ms:
-                return False, f"Start marker '{job.marker_name}' not found."
-            start_frame = int(ms.frame) + int(job.marker_offset)
+                return False, f"Start marker '{job.marker_name}' not found.".strip()
+            src_start = int(ms.frame) + int(job.marker_offset)
         else:
-            start_frame = int(job.frame_start)
+            src_start = int(job.frame_start)
         if job.link_end_marker:
             if not job.end_marker_name:
                 return False, 'End marker enabled but not selected.'
             me = scn.timeline_markers.get(job.end_marker_name)
             if not me:
-                return False, f"End marker '{job.end_marker_name}' not found."
-            end_frame = int(me.frame) + int(job.end_marker_offset)
+                return False, f"End marker '{job.end_marker_name}' not found.".strip()
+            src_end = int(me.frame) + int(job.end_marker_offset)
         else:
-            end_frame = int(job.frame_end)
-        if end_frame < start_frame:
-            end_frame = start_frame
-        # Respect original frame numbering so filenames / data match expected frame numbers.
-        scn.frame_start = start_frame
-        scn.frame_end = end_frame
-        scn.frame_current = start_frame
+            src_end = int(job.frame_end)
+        if src_end < src_start:
+            src_end = src_start
+        length = (src_end - src_start) + 1
+        scn.frame_start = 0
+        scn.frame_end = max(0, length - 1)
+        scn.frame_current = 0
     else:
-        # For single frame renders, ensure current frame is the requested start (or 1 fallback)
-        scn.frame_current = int(job.frame_start) if getattr(job, 'frame_start', None) else scn.frame_current
+        # Single still: always frame 0 for consistent 0000 numbering
+        scn.frame_start = 0
+        scn.frame_end = 0
+        scn.frame_current = 0
     safe_base = _sanitize_component(job.file_basename or 'render')
     scn.render.image_settings.file_format = job.file_format or 'PNG'
     bdir = base_render_dir(job)
     _ensure_dir(bdir)
+    # Pre-create compositor root as well to reduce race conditions for File Output nodes
+    try:
+        from .comp import comp_root_dir
+        _ensure_dir(comp_root_dir(job))
+    except Exception:
+        pass
     # Ensure trailing separator then base name (Blender appends frame + view identifiers automatically)
     scn.render.filepath = os.path.join(bdir, '') + safe_base
     if job.use_comp_outputs and len(job.comp_outputs) > 0:

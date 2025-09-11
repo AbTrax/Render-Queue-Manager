@@ -99,6 +99,7 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
     safe_base = _sanitize_component(job.file_basename or 'render')
     target_prefix = f'{safe_job}_{safe_base}'
     _ensure_min_slot(node, target_prefix)
+    # Only override default/empty slot names ('', 'image', 'render') to avoid clobbering user custom slot paths
     try:
         for fs in node.file_slots:
             if not fs.path or fs.path.lower() in {'image','render'}:

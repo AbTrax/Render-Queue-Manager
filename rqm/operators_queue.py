@@ -179,12 +179,27 @@ class RQM_OT_StartQueue(Operator):
         st = get_state(context)
         if st is None or not st.running:
             return {'CANCELLED'}
+        # Safety: ensure handlers stay registered (some Blender sessions may clear them on reload)
+        try:
+            register_handlers()
+        except Exception:
+            pass
         if st.current_job_index >= len(st.queue):
             st.running = False
             st.current_job_index = -1
             self.report({'INFO'}, 'Queue complete.')
             return {'FINISHED'}
+        # Fallback: if we think a render is in progress but Blender reports none, advance
         if st.render_in_progress:
+            try:
+                # bpy.app.is_job_running('RENDER') returns False when no render
+                if not bpy.app.is_job_running('RENDER'):
+                    print('[RQM] Detected stalled render flag, auto-advancing queue.')
+                    st.render_in_progress = False
+                    st.current_job_index += 1
+                    return {'PASS_THROUGH'}
+            except Exception:
+                pass
             return {'PASS_THROUGH'}
         job = st.queue[st.current_job_index]
         ok, msg = apply_job(job)
@@ -194,7 +209,12 @@ class RQM_OT_StartQueue(Operator):
             return {'PASS_THROUGH'}
         st.render_in_progress = True
         try:
-            bpy.ops.render.render('INVOKE_DEFAULT', animation=job.use_animation)
+            # Use EXEC_DEFAULT for reliability when non-interactive / background focus loss
+            if job.use_animation:
+                bpy.ops.render.render('EXEC_DEFAULT', animation=True)
+            else:
+                bpy.ops.render.render('EXEC_DEFAULT', write_still=True)
+            print(f"[RQM] Started render for job {st.current_job_index+1}/{len(st.queue)}: {job.name}")
         except Exception as e:
             self.report({'ERROR'}, str(e))
             st.render_in_progress = False
