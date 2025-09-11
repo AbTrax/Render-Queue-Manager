@@ -19,7 +19,7 @@ def _operator_scene_items(self, context):
 __all__ = [
     'RQM_OT_AddFromCurrent','RQM_OT_AddCamerasInScene','RQM_OT_RemoveJob','RQM_OT_ClearQueue',
     'RQM_OT_MoveJob','RQM_OT_StartQueue','RQM_OT_StopQueue',
-    'RQM_OT_DuplicateJob','RQM_OT_EnableAllJobs','RQM_OT_DisableAllJobs'
+    'RQM_OT_DuplicateJob','RQM_OT_EnableAllJobs','RQM_OT_DisableAllJobs','RQM_OT_ToggleJobEnabled'
 ]
 
 class RQM_OT_AddFromCurrent(Operator):
@@ -158,8 +158,8 @@ class RQM_OT_DuplicateJob(Operator):
         # Copy simple attributes
         for attr in [
             'scene_name','camera_name','engine','res_x','res_y','percent',
-            'use_animation','frame_start','frame_end','link_marker','marker_name','marker_offset',
-            'link_end_marker','end_marker_name','end_marker_offset','file_format','output_path','file_basename',
+            'use_animation','frame_start','frame_end','link_timeline_markers','link_marker','marker_name','marker_offset',
+            'link_end_marker','end_marker_name','end_marker_offset','file_format','output_path','file_basename','rebase_numbering',
             'use_comp_outputs','comp_outputs_non_blocking','use_stereoscopy','stereo_views_format','stereo_extra_tags',
             'stereo_keep_plain','use_tag_collection','enabled'
         ]:
@@ -209,6 +209,25 @@ class RQM_OT_DisableAllJobs(Operator):
                 j.enabled = False
         self.report({'INFO'}, 'All jobs disabled.')
         return {'FINISHED'}
+
+class RQM_OT_ToggleJobEnabled(Operator):
+    bl_idname = 'rqm.toggle_job_enabled'
+    bl_label = 'Toggle Job Enabled'
+    bl_options = {'REGISTER','UNDO'}
+    index: IntProperty(default=-1)
+    def execute(self, context):
+        st = get_state(context)
+        if st is None or not st.queue:
+            return {'CANCELLED'}
+        idx = self.index if self.index >= 0 else st.active_index
+        if not (0 <= idx < len(st.queue)):
+            return {'CANCELLED'}
+        job = st.queue[idx]
+        if hasattr(job, 'enabled'):
+            job.enabled = not bool(job.enabled)
+            self.report({'INFO'}, f"Job {'enabled' if job.enabled else 'disabled'}: {job.name}")
+            return {'FINISHED'}
+        return {'CANCELLED'}
 
 class RQM_OT_MoveJob(Operator):
     bl_idname = 'rqm.move_job'

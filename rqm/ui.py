@@ -11,6 +11,12 @@ class RQM_UL_Queue(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT','COMPACT'}:
             row = layout.row(align=True)
+            # Grey out when disabled but keep selectable
+            try:
+                if hasattr(item, 'enabled') and not item.enabled:
+                    row.enabled = False
+            except Exception:
+                pass
             # Keep row clean: just name and context
             row.prop(item, 'name', text='', emboss=False, icon='RENDER_RESULT')
             cam_part = item.camera_name or '<no cam>'
@@ -48,6 +54,7 @@ class RQM_PT_Panel(Panel):
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = 'output'
+
     def draw(self, context):
         layout = self.layout
         st = get_state(context)
@@ -80,8 +87,6 @@ class RQM_PT_Panel(Panel):
 
             box = layout.box()
             top_row = box.row(align=True)
-            if hasattr(job, 'enabled'):
-                top_row.prop(job, 'enabled', text='')
             top_row.prop(job, 'name', text='Name')
 
             row = box.row()
@@ -99,18 +104,17 @@ class RQM_PT_Panel(Panel):
             col.separator(); col.prop(job, 'use_animation')
             if job.use_animation:
                 fr = col.row(align=True)
+                fr.enabled = not getattr(job, 'link_timeline_markers', False)
                 fr.prop(job, 'frame_start'); fr.prop(job, 'frame_end')
                 col.separator(); col.label(text='Timeline markers', icon='MARKER_HLT')
-                col.prop(job, 'link_marker')
-                if job.link_marker:
+                col.prop(job, 'link_timeline_markers', text='Link timeline markers')
+                if getattr(job, 'link_timeline_markers', False):
                     r = col.row(align=True)
                     if scn_for_job:
                         r.prop_search(job, 'marker_name', scn_for_job, 'timeline_markers', text='Start')
                     else:
                         r.prop(job, 'marker_name', text='Start')
                     r.prop(job, 'marker_offset')
-                col.prop(job, 'link_end_marker')
-                if job.link_end_marker:
                     r2 = col.row(align=True)
                     if scn_for_job:
                         r2.prop_search(job, 'end_marker_name', scn_for_job, 'timeline_markers', text='End')
@@ -120,6 +124,8 @@ class RQM_PT_Panel(Panel):
 
             col.separator(); col.label(text='Standard Output', icon='FILE_FOLDER')
             col.prop(job, 'file_format'); col.prop(job, 'output_path'); col.prop(job, 'file_basename')
+            if job.use_animation and hasattr(job, 'rebase_numbering'):
+                col.prop(job, 'rebase_numbering')
 
             col.separator(); col.label(text='Stereoscopy', icon='CAMERA_STEREO')
             col.prop(job, 'use_stereoscopy')

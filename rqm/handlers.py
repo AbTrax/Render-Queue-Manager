@@ -31,6 +31,12 @@ def register_handlers():
                     job = st.queue[idx]
                     if getattr(job, 'use_stereoscopy', False):
                         _stereo_rename(job)
+                    # Rebase numbering if requested
+                    try:
+                        if getattr(job, 'use_animation', False) and getattr(job, 'rebase_numbering', True):
+                            _rebase_numbering(job)
+                    except Exception:
+                        pass
             except Exception:
                 pass
             if st.running and was_render and not getattr(st, '_skip_increment_once', False) and st.current_job_index < len(st.queue):
@@ -70,6 +76,7 @@ _view_pat_variants = [
 _plain_frame_pat = re.compile(r'^(?P<base>.+?)(?P<frame>\d{3,})(?P<ext>\.[^.]+)$')
 _dup_token_sep = re.compile(r'[_\.]+')
 _num_before_suffix_pat = re.compile(r'^(?P<base>.+?)(?P<frame>\d{3,})(?P<tag>_[A-Za-z0-9]+)(?P<ext>\.[^.]+)$')
+_any_frame_pat = re.compile(r'^(?P<prefix>.+?)(?P<tag>_[A-Za-z0-9]+)?\s+(?P<frame>\d{3,})(?P<ext>\.[^.]+)$')
 
 def _parse_extra_tags(raw: str):
     tags = []
@@ -255,5 +262,80 @@ def _stereo_rename(job):
                                 pass
         except Exception:
             pass
+    except Exception:
+        pass
+
+def _compute_src_range(job):
+    scn = bpy.data.scenes.get(job.scene_name)
+    # Fallback to job fields if scene/markers not available
+    try:
+        if getattr(job, 'link_timeline_markers', False) and scn:
+            ms = scn.timeline_markers.get(job.marker_name) if job.marker_name else None
+            me = scn.timeline_markers.get(job.end_marker_name) if job.end_marker_name else None
+            src_start = int(ms.frame) + int(job.marker_offset) if ms else int(job.frame_start)
+            src_end = int(me.frame) + int(job.end_marker_offset) if me else int(job.frame_end)
+        else:
+            if getattr(job, 'link_marker', False) and scn:
+                ms = scn.timeline_markers.get(job.marker_name) if job.marker_name else None
+                src_start = int(ms.frame) + int(job.marker_offset) if ms else int(job.frame_start)
+            else:
+                src_start = int(job.frame_start)
+            if getattr(job, 'link_end_marker', False) and scn:
+                me = scn.timeline_markers.get(job.end_marker_name) if job.end_marker_name else None
+                src_end = int(me.frame) + int(job.end_marker_offset) if me else int(job.frame_end)
+            else:
+                src_end = int(job.frame_end)
+        if src_end < src_start:
+            src_end = src_start
+        return src_start, src_end
+    except Exception:
+        return int(job.frame_start), int(job.frame_end)
+
+def _rebase_numbering(job):
+    try:
+        src_start, src_end = _compute_src_range(job)
+        bdir = base_render_dir(job)
+        if not os.path.isdir(bdir):
+            return
+        job_root = os.path.dirname(bdir.rstrip('/\\'))
+        search_roots = [bdir]
+        if os.path.isdir(job_root):
+            search_roots.append(job_root)
+            try:
+                for entry in os.listdir(job_root):
+                    p = os.path.join(job_root, entry)
+                    if os.path.isdir(p):
+                        search_roots.append(p)
+            except Exception:
+                pass
+        # Go through files that end with ' <frame>.ext' (with optional _TAG)
+        for root in search_roots:
+            try:
+                for fname in os.listdir(root):
+                    m = _any_frame_pat.match(fname)
+                    if not m:
+                        continue
+                    frame_no = int(m.group('frame'))
+                    if frame_no < src_start or frame_no > src_end:
+                        continue
+                    new_index = frame_no - src_start
+                    width = len(m.group('frame'))
+                    new_frame_str = str(new_index).zfill(width)
+                    prefix = m.group('prefix')
+                    tag = m.group('tag') or ''
+                    ext = m.group('ext')
+                    new_name = f"{prefix}{tag} {new_frame_str}{ext}"
+                    if new_name == fname:
+                        continue
+                    src_path = os.path.join(root, fname)
+                    dst_path = os.path.join(root, new_name)
+                    try:
+                        if os.path.exists(dst_path):
+                            os.remove(dst_path)
+                        os.replace(src_path, dst_path)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
     except Exception:
         pass

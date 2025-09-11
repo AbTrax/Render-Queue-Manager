@@ -45,24 +45,40 @@ def apply_job(job: RQM_Job):
         pass
     if job.use_animation:
         # Preserve actual frame numbers (no remap) so disparate ranges (e.g., 3-10 then 20-30) keep original numbering
-        if job.link_marker:
+        if getattr(job, 'link_timeline_markers', False):
+            # Require both markers when the link option is on
             if not job.marker_name:
-                return False, 'Start marker enabled but not selected.'
+                return False, 'Start marker not selected.'
+            if not job.end_marker_name:
+                return False, 'End marker not selected.'
             ms = scn.timeline_markers.get(job.marker_name)
+            me = scn.timeline_markers.get(job.end_marker_name)
             if not ms:
                 return False, f"Start marker '{job.marker_name}' not found.".strip()
-            src_start = int(ms.frame) + int(job.marker_offset)
-        else:
-            src_start = int(job.frame_start)
-        if job.link_end_marker:
-            if not job.end_marker_name:
-                return False, 'End marker enabled but not selected.'
-            me = scn.timeline_markers.get(job.end_marker_name)
             if not me:
                 return False, f"End marker '{job.end_marker_name}' not found.".strip()
+            src_start = int(ms.frame) + int(job.marker_offset)
             src_end = int(me.frame) + int(job.end_marker_offset)
         else:
-            src_end = int(job.frame_end)
+            # Backward-compatible: allow separate flags
+            if getattr(job, 'link_marker', False):
+                if not job.marker_name:
+                    return False, 'Start marker enabled but not selected.'
+                ms = scn.timeline_markers.get(job.marker_name)
+                if not ms:
+                    return False, f"Start marker '{job.marker_name}' not found.".strip()
+                src_start = int(ms.frame) + int(job.marker_offset)
+            else:
+                src_start = int(job.frame_start)
+            if getattr(job, 'link_end_marker', False):
+                if not job.end_marker_name:
+                    return False, 'End marker enabled but not selected.'
+                me = scn.timeline_markers.get(job.end_marker_name)
+                if not me:
+                    return False, f"End marker '{job.end_marker_name}' not found.".strip()
+                src_end = int(me.frame) + int(job.end_marker_offset)
+            else:
+                src_end = int(job.frame_end)
         if src_end < src_start:
             src_end = src_start
         scn.frame_start = src_start

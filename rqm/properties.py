@@ -50,6 +50,10 @@ class RQM_Job(PropertyGroup):
     preserve_frame_numbers: BoolProperty(name='Preserve frame numbers', default=True,
         description='If enabled, renders use the original frame numbers (e.g. 20-30). If disabled, frames are remapped to start at 0 for this job.')
 
+    # Single toggle to control using timeline markers for both start and end
+    link_timeline_markers: BoolProperty(name='Link timeline markers', default=False,
+        description='When enabled, use Start/End timeline markers (with offsets) and disable manual Start/End frame inputs')
+
     link_marker: BoolProperty(name='Use start marker', default=False)
     marker_name: StringProperty(name='Start marker name', default='')
     marker_offset: IntProperty(name='Start offset', default=0)
@@ -63,6 +67,8 @@ class RQM_Job(PropertyGroup):
     output_path: StringProperty(name='Render folder', subtype='DIR_PATH', default='//renders/')
     file_basename: StringProperty(name='Render filename', default='render',
         description="Prefix for main render files (sanitised). Example: 'beauty' -> beauty0001.png")
+    rebase_numbering: BoolProperty(name='Number files from 0', default=True,
+        description='For animations, rename output files so numbering starts at 0000 for this job, regardless of timeline frame indices')
 
     use_comp_outputs: BoolProperty(name='Use Compositor outputs', default=False)
     comp_outputs_non_blocking: BoolProperty(name='Don’t block render on compositor errors', default=True)
