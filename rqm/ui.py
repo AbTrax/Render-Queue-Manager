@@ -133,9 +133,13 @@ class RQM_PT_Panel(Panel):
                 col.prop(job, 'stereo_extra_tags')
                 col.prop(job, 'stereo_keep_plain')
                 tag_row = col.row(align=True)
-                tag_row.prop(job, 'use_tag_collection', text='Use Tag List')
+                # Older installed versions may not have this property; guard UI drawing
+                if hasattr(job, 'use_tag_collection'):
+                    tag_row.prop(job, 'use_tag_collection', text='Use Tag List')
+                else:
+                    tag_row.label(text='Use Tag List (update add-on)')
                 tag_row.operator('rqm.detect_tags', text='', icon='VIEWZOOM')
-                if job.use_tag_collection:
+                if getattr(job, 'use_tag_collection', False):
                     tag_box = col.box()
                     tag_box.template_list('RQM_UL_Tags', '', job, 'stereo_tags', job, 'stereo_tags_index', rows=3)
 

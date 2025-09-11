@@ -1,7 +1,7 @@
 bl_info = {
     'name': 'Render Queue Manager',
     'author': 'Xnom3d',
-    'version': (1, 11, 0),
+    'version': (1, 11, 1),
     'blender': (3, 0, 0),
     'location': 'Properties > Output > Render Queue Manager',
     'description': 'Queue renders with per‑job folders & compositor outputs; modular package version.',
@@ -51,12 +51,18 @@ classes = (
 )
 
 def register():
+    # Robust (re)registration: if a class is already registered, unregister then register
     for c in classes:
-        if not hasattr(bpy.types, c.__name__):
+        try:
+            bpy.utils.register_class(c)
+        except ValueError:
+            try:
+                bpy.utils.unregister_class(c)
+            except Exception:
+                pass
             try:
                 bpy.utils.register_class(c)
-            except ValueError:
-                # class already registered
+            except Exception:
                 pass
     if not hasattr(bpy.types.Scene, 'rqm_state'):
         bpy.types.Scene.rqm_state = PointerProperty(type=RQM_State)
