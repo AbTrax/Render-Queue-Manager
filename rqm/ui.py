@@ -1,6 +1,6 @@
 """UI Lists and Panels for the add-on (legacy layout parity)."""
 from __future__ import annotations
-import bpy
+import bpy  # type: ignore
 from bpy.types import UIList, Panel
 from .state import get_state
 
@@ -97,6 +97,13 @@ class RQM_PT_Panel(Panel):
             col.separator()
             col.label(text='Standard Render Output', icon='FILE_FOLDER')
             col.prop(job, 'file_format'); col.prop(job, 'output_path'); col.prop(job, 'file_basename')
+
+            col.separator()
+            col.label(text='Stereoscopy', icon='CAMERA_STEREO')
+            col.prop(job, 'use_stereoscopy')
+            if getattr(job, 'use_stereoscopy', False):
+                if hasattr(job, 'stereo_views_format'):
+                    col.prop(job, 'stereo_views_format', text='Views')
 
             col.separator()
             col.label(text='Compositor Outputs (optional)', icon='NODE_COMPOSITING')

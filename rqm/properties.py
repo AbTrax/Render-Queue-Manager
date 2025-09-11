@@ -1,12 +1,12 @@
 """Property groups and shared data structures."""
 from __future__ import annotations
 import os
-import bpy
+import bpy  # type: ignore  # Blender runtime provided
 from bpy.props import (
     StringProperty, BoolProperty, IntProperty, EnumProperty,
     PointerProperty, CollectionProperty
 )
-from bpy.types import PropertyGroup
+from bpy.types import PropertyGroup  # type: ignore
 from .utils import scene_items, camera_items, engine_items, FILE_FORMAT_ITEMS, _sanitize_component
 
 __all__ = ['RQM_CompOutput','RQM_Job','RQM_State']
@@ -62,6 +62,14 @@ class RQM_Job(PropertyGroup):
     comp_outputs_non_blocking: BoolProperty(name='Don’t block render on compositor errors', default=True)
     comp_outputs: CollectionProperty(type=RQM_CompOutput)
     comp_outputs_index: IntProperty(default=0)
+
+    # Stereoscopy / Multiview
+    use_stereoscopy: BoolProperty(name='Use Stereoscopy', default=False,
+        description='Enable multiview (stereoscopic) rendering for this job')
+    stereo_views_format: EnumProperty(name='Stereo Format', items=[
+        ('STEREO_3D', 'Stereo 3D', 'Left and Right views'),
+        ('MULTIVIEW', 'Multi-View', 'Use scene multi-view configuration')
+    ], default='STEREO_3D', description='How to configure view rendering for this job')
 
 class RQM_State(PropertyGroup):
     queue: CollectionProperty(type=RQM_Job)

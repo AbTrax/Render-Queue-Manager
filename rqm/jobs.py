@@ -1,7 +1,7 @@
 """Job application logic (scene setup, frame range, outputs, compositor sync)."""
 from __future__ import annotations
 import os
-import bpy
+import bpy  # type: ignore
 from .utils import _sanitize_component, _ensure_dir
 from .comp import base_render_dir, sync_one_output
 from .properties import RQM_Job
@@ -27,6 +27,22 @@ def apply_job(job: RQM_Job):
     scn.render.resolution_x = job.res_x
     scn.render.resolution_y = job.res_y
     scn.render.resolution_percentage = job.percent
+    # Stereoscopy (multiview) handling
+    try:
+        if getattr(job, 'use_stereoscopy', False):
+            scn.render.use_multiview = True
+            # If user wants plain stereo 3D and Blender supports setting views_format
+            if getattr(job, 'stereo_views_format', 'STEREO_3D') == 'STEREO_3D' and hasattr(scn.render, 'views_format'):
+                try:
+                    scn.render.views_format = 'STEREO_3D'
+                except Exception:
+                    pass
+            # MULTIVIEW: leave as-is (scene configured views)
+        else:
+            if hasattr(scn.render, 'use_multiview'):
+                scn.render.use_multiview = False
+    except Exception:
+        pass
     if job.use_animation:
         if job.link_marker:
             if not job.marker_name:

@@ -1,7 +1,7 @@
 """Queue management operators."""
 from __future__ import annotations
 import os
-import bpy
+import bpy  # type: ignore
 from bpy.types import Operator
 from bpy.props import IntProperty, EnumProperty
 from .state import get_state
@@ -51,6 +51,11 @@ class RQM_OT_AddFromCurrent(Operator):
         job.use_comp_outputs = False
         job.comp_outputs_non_blocking = True
         job.comp_outputs.clear()
+        # Stereoscopy defaults
+        if hasattr(job, 'use_stereoscopy'):
+            job.use_stereoscopy = False
+        if hasattr(job, 'stereo_views_format'):
+            job.stereo_views_format = 'STEREO_3D'
         cam_part = job.camera_name or 'noCam'
         job.name = f'{job.scene_name}_{cam_part}'
         st.active_index = len(st.queue)-1
@@ -98,6 +103,10 @@ class RQM_OT_AddCamerasInScene(Operator):
             job.output_path = existing or '//renders/'
             job.file_basename = cam.name
             job.name = f'{job.scene_name}_{_sanitize_component(cam.name)}'
+            if hasattr(job, 'use_stereoscopy'):
+                job.use_stereoscopy = False
+            if hasattr(job, 'stereo_views_format'):
+                job.stereo_views_format = 'STEREO_3D'
         st.active_index = len(st.queue)-1
         self.report({'INFO'}, f'Added {len(cams)} jobs.')
         return {'FINISHED'}
