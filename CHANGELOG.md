@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.11.2] - 2025-09-11
+
+### Removed (Stereoscopy UI)
+
+- Detect View Tags operator and UI button. Simplifies stereoscopy workflow; free-text extra tags remain.
+
+### Changed (Registration)
+
+- Robust class re-registration to ensure updated PropertyGroups are applied after updates.
+
+### Fixed (Compatibility)
+
+- UI and operators now guard against missing stereoscopic properties on legacy sessions.
+
+## [1.11.1] - 2025-09-11
+
+### Fixed (UI)
+
+- Prevented AttributeErrors in UI when `use_tag_collection` is missing on older-registered jobs.
+- Detect Tags operator made resilient and provided free‑text fallback (subsequently removed in 1.11.2).
+
 ## [1.10.10] - 2025-09-11
 
 ### Fixed (Timer / Modal Queue)

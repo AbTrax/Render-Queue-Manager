@@ -53,7 +53,7 @@ For a job named `Shot01_MainCam` with basename `render`:
 ```
 <output_root>/Shot01_MainCam/
   base/render0000.png …
-  comp/<FileOutputNodeName>/<job>_<basename>0000.png
+  <FileOutputNodeName>/<job>_<basename>0000.png
 ```
 Animation frame range (e.g. 101–148) is internally remapped so exported files still begin at `0000`.
 
@@ -70,6 +70,8 @@ When enabled:
 3. Optionally pick base source: Job output folder, Scene output folder, or a folder inferred from a chosen file.
 4. Optional node-named and custom token subfolders (`{scene} {camera} {job} {node}`).
 5. Slots with default/empty paths are renamed to `<job>_<basename>`.
+
+Note: The previous “Detect View Tags” utility was removed. Use the free‑text Extra View Tags field to specify additional tags if needed.
 
 ## 🔌 Extension Hooks
 Register a preprocessor to tweak the scene before each job render:
