@@ -19,7 +19,7 @@ def _operator_scene_items(self, context):
 __all__ = [
     'RQM_OT_AddFromCurrent','RQM_OT_AddCamerasInScene','RQM_OT_RemoveJob','RQM_OT_ClearQueue',
     'RQM_OT_MoveJob','RQM_OT_StartQueue','RQM_OT_StopQueue',
-    'RQM_OT_DuplicateJob','RQM_OT_EnableAllJobs','RQM_OT_DisableAllJobs','RQM_OT_ToggleJobEnabled'
+    'RQM_OT_DuplicateJob'
 ]
 
 class RQM_OT_AddFromCurrent(Operator):
@@ -161,7 +161,7 @@ class RQM_OT_DuplicateJob(Operator):
             'use_animation','frame_start','frame_end','link_timeline_markers','link_marker','marker_name','marker_offset',
             'link_end_marker','end_marker_name','end_marker_offset','file_format','output_path','file_basename','rebase_numbering',
             'use_comp_outputs','comp_outputs_non_blocking','use_stereoscopy','stereo_views_format','stereo_extra_tags',
-            'stereo_keep_plain','use_tag_collection','enabled'
+            'stereo_keep_plain','use_tag_collection'
         ]:
             if hasattr(dst, attr) and hasattr(src, attr):
                 setattr(dst, attr, getattr(src, attr))
@@ -182,52 +182,7 @@ class RQM_OT_DuplicateJob(Operator):
         self.report({'INFO'}, 'Job duplicated.')
         return {'FINISHED'}
 
-class RQM_OT_EnableAllJobs(Operator):
-    bl_idname = 'rqm.enable_all_jobs'
-    bl_label = 'Enable All Jobs'
-    bl_options = {'REGISTER','UNDO'}
-    def execute(self, context):
-        st = get_state(context)
-        if st is None:
-            return {'CANCELLED'}
-        for j in st.queue:
-            if hasattr(j, 'enabled'):
-                j.enabled = True
-        self.report({'INFO'}, 'All jobs enabled.')
-        return {'FINISHED'}
-
-class RQM_OT_DisableAllJobs(Operator):
-    bl_idname = 'rqm.disable_all_jobs'
-    bl_label = 'Disable All Jobs'
-    bl_options = {'REGISTER','UNDO'}
-    def execute(self, context):
-        st = get_state(context)
-        if st is None:
-            return {'CANCELLED'}
-        for j in st.queue:
-            if hasattr(j, 'enabled'):
-                j.enabled = False
-        self.report({'INFO'}, 'All jobs disabled.')
-        return {'FINISHED'}
-
-class RQM_OT_ToggleJobEnabled(Operator):
-    bl_idname = 'rqm.toggle_job_enabled'
-    bl_label = 'Toggle Job Enabled'
-    bl_options = {'REGISTER','UNDO'}
-    index: IntProperty(default=-1)
-    def execute(self, context):
-        st = get_state(context)
-        if st is None or not st.queue:
-            return {'CANCELLED'}
-        idx = self.index if self.index >= 0 else st.active_index
-        if not (0 <= idx < len(st.queue)):
-            return {'CANCELLED'}
-        job = st.queue[idx]
-        if hasattr(job, 'enabled'):
-            job.enabled = not bool(job.enabled)
-            self.report({'INFO'}, f"Job {'enabled' if job.enabled else 'disabled'}: {job.name}")
-            return {'FINISHED'}
-        return {'CANCELLED'}
+        
 
 class RQM_OT_MoveJob(Operator):
     bl_idname = 'rqm.move_job'
@@ -273,9 +228,7 @@ class RQM_OT_StartQueue(Operator):
             register_handlers()
         except Exception:
             pass
-        # Advance past any disabled jobs
-        while st.current_job_index < len(st.queue) and not getattr(st.queue[st.current_job_index], 'enabled', True):
-            st.current_job_index += 1
+    # Process jobs sequentially
         if st.current_job_index >= len(st.queue):
             st.running = False
             st.current_job_index = -1

@@ -90,7 +90,6 @@ class RQM_Job(PropertyGroup):
     stereo_tags_index: IntProperty(default=0)
     use_tag_collection: BoolProperty(name='Use tag list', default=False,
         description='If enabled, only the tags in the list (checked) are used instead of the free-text field')
-    enabled: BoolProperty(name='Enabled', default=True, description='If off, this job will be skipped in the queue')
 
 class RQM_State(PropertyGroup):
     queue: CollectionProperty(type=RQM_Job)
