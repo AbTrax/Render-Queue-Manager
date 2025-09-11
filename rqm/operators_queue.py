@@ -4,6 +4,7 @@ import os
 import bpy  # type: ignore
 from bpy.types import Operator
 from bpy.props import IntProperty, EnumProperty
+from typing import Any as _Any
 from .state import get_state
 from .properties import RQM_Job
 from .handlers import register_handlers
@@ -25,6 +26,7 @@ __all__ = [
 class RQM_OT_AddFromCurrent(Operator):
     bl_idname = 'rqm.add_from_current'
     bl_label = 'Add Job (Use current scene & camera)'
+    bl_description = 'Add a job using the current scene and camera, capturing key render settings and defaults.'
     bl_options = {'REGISTER','UNDO'}
     def execute(self, context):
         st = get_state(context)
@@ -66,8 +68,9 @@ class RQM_OT_AddFromCurrent(Operator):
 class RQM_OT_AddCamerasInScene(Operator):
     bl_idname = 'rqm.add_cameras_in_scene'
     bl_label = 'Add Jobs for all cameras in a scene'
+    bl_description = 'Create one job for each camera in the chosen scene, inheriting scene render settings.'
     bl_options = {'REGISTER','UNDO'}
-    scene_name: EnumProperty(name='Scene', items=_operator_scene_items)
+    scene_name: _Any = EnumProperty(name='Scene', items=_operator_scene_items)
     def invoke(self, context, event):
         if not self.scene_name and context.scene:
             self.scene_name = context.scene.name
@@ -115,8 +118,9 @@ class RQM_OT_AddCamerasInScene(Operator):
 class RQM_OT_RemoveJob(Operator):
     bl_idname = 'rqm.remove_job'
     bl_label = 'Remove Job'
+    bl_description = 'Remove the selected job from the queue.'
     bl_options = {'REGISTER','UNDO'}
-    index: IntProperty(default=-1)
+    index: _Any = IntProperty(default=-1)
     def execute(self, context):
         st = get_state(context)
         if st is None:
@@ -132,6 +136,7 @@ class RQM_OT_RemoveJob(Operator):
 class RQM_OT_ClearQueue(Operator):
     bl_idname = 'rqm.clear_queue'
     bl_label = 'Clear All Jobs'
+    bl_description = 'Remove all jobs from the queue.'
     bl_options = {'REGISTER','UNDO'}
     def execute(self, context):
         st = get_state(context)
@@ -144,8 +149,9 @@ class RQM_OT_ClearQueue(Operator):
 class RQM_OT_DuplicateJob(Operator):
     bl_idname = 'rqm.duplicate_job'
     bl_label = 'Duplicate Job'
+    bl_description = 'Duplicate the selected job, including compositor outputs and tags.'
     bl_options = {'REGISTER','UNDO'}
-    index: IntProperty(default=-1)
+    index: _Any = IntProperty(default=-1)
     def execute(self, context):
         st = get_state(context)
         if st is None or not st.queue:
@@ -185,6 +191,7 @@ class RQM_OT_DuplicateJob(Operator):
 class RQM_OT_EnableAllJobs(Operator):
     bl_idname = 'rqm.enable_all_jobs'
     bl_label = 'Enable All Jobs'
+    bl_description = 'Enable every job in the queue.'
     bl_options = {'REGISTER','UNDO'}
     def execute(self, context):
         st = get_state(context)
@@ -199,6 +206,7 @@ class RQM_OT_EnableAllJobs(Operator):
 class RQM_OT_DisableAllJobs(Operator):
     bl_idname = 'rqm.disable_all_jobs'
     bl_label = 'Disable All Jobs'
+    bl_description = 'Disable every job in the queue.'
     bl_options = {'REGISTER','UNDO'}
     def execute(self, context):
         st = get_state(context)
@@ -213,8 +221,9 @@ class RQM_OT_DisableAllJobs(Operator):
 class RQM_OT_ToggleJobEnabled(Operator):
     bl_idname = 'rqm.toggle_job_enabled'
     bl_label = 'Toggle Job Enabled'
+    bl_description = 'Toggle the enabled state of the selected job.'
     bl_options = {'REGISTER','UNDO'}
-    index: IntProperty(default=-1)
+    index: _Any = IntProperty(default=-1)
     def execute(self, context):
         st = get_state(context)
         if st is None or not st.queue:
@@ -232,8 +241,9 @@ class RQM_OT_ToggleJobEnabled(Operator):
 class RQM_OT_MoveJob(Operator):
     bl_idname = 'rqm.move_job'
     bl_label = 'Move Job'
+    bl_description = 'Move the selected job up or down in the queue.'
     bl_options = {'REGISTER','UNDO'}
-    direction: EnumProperty(items=[('UP','Up',''),('DOWN','Down','')])
+    direction: _Any = EnumProperty(items=[('UP','Up',''),('DOWN','Down','')])
     def execute(self, context):
         st = get_state(context)
         if st is None:
@@ -254,6 +264,7 @@ class RQM_OT_MoveJob(Operator):
 class RQM_OT_StartQueue(Operator):
     bl_idname = 'rqm.start_queue'
     bl_label = 'Start Render Queue'
+    bl_description = 'Start processing the render queue; runs in a modal loop until complete or stopped.'
     bl_options = {'REGISTER'}
     def execute(self, context):
         st = get_state(context)
@@ -318,6 +329,7 @@ class RQM_OT_StartQueue(Operator):
 class RQM_OT_StopQueue(Operator):
     bl_idname = 'rqm.stop_queue'
     bl_label = 'Stop Render Queue'
+    bl_description = 'Stop the render queue and reset running state.'
     bl_options = {'REGISTER'}
     def execute(self, context):
         st = get_state(context)

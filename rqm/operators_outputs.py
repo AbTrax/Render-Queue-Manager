@@ -3,6 +3,7 @@ from __future__ import annotations
 import bpy
 from bpy.types import Operator
 from bpy.props import EnumProperty
+from typing import Any as _Any
 from .state import get_state
 import os, re, glob
 from .comp import base_render_dir
@@ -13,6 +14,7 @@ __all__ = ['RQM_OT_Output_Add','RQM_OT_Output_Remove','RQM_OT_Output_Move','RQM_
 class RQM_OT_Output_Add(Operator):
     bl_idname = 'rqm.output_add'
     bl_label = 'Add Compositor Output'
+    bl_description = 'Add a compositor File Output configuration to the active job.'
     bl_options = {'REGISTER','UNDO'}
     def execute(self, context):
         st = get_state(context)
@@ -34,6 +36,7 @@ class RQM_OT_Output_Add(Operator):
 class RQM_OT_Output_Remove(Operator):
     bl_idname = 'rqm.output_remove'
     bl_label = 'Remove Compositor Output'
+    bl_description = 'Remove the selected compositor output from the active job.'
     bl_options = {'REGISTER','UNDO'}
     def execute(self, context):
         st = get_state(context)
@@ -49,8 +52,9 @@ class RQM_OT_Output_Remove(Operator):
 class RQM_OT_Output_Move(Operator):
     bl_idname = 'rqm.output_move'
     bl_label = 'Move Compositor Output'
+    bl_description = 'Reorder the selected compositor output up or down.'
     bl_options = {'REGISTER','UNDO'}
-    direction: EnumProperty(items=[('UP','Up',''),('DOWN','Down','')])
+    direction: _Any = EnumProperty(items=[('UP','Up',''),('DOWN','Down','')])
     def execute(self, context):
         st = get_state(context)
         if not (st and 0 <= st.active_index < len(st.queue)):
@@ -70,6 +74,7 @@ class RQM_OT_Output_Move(Operator):
 class RQM_OT_DetectTags(Operator):
     bl_idname = 'rqm.detect_tags'
     bl_label = 'Detect View Tags'
+    bl_description = 'Scan the base output folder for additional stereo view tags and add them to the job.'
     bl_options = {'REGISTER'}
     def execute(self, context):
         st = get_state(context)
