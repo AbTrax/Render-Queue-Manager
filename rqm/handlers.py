@@ -69,6 +69,7 @@ _view_pat_variants = [
 ]
 _plain_frame_pat = re.compile(r'^(?P<base>.+?)(?P<frame>\d{3,})(?P<ext>\.[^.]+)$')
 _dup_token_sep = re.compile(r'[_\.]+')
+_num_before_suffix_pat = re.compile(r'^(?P<base>.+?)(?P<frame>\d{3,})(?P<tag>_[A-Za-z0-9]+)(?P<ext>\.[^.]+)$')
 
 def _parse_extra_tags(raw: str):
     tags = []
@@ -155,17 +156,39 @@ def _stereo_rename(job):
                     new_name = f"{clean_base}_{view_token} {frame}{ext_full}"
                     if new_name != name:
                         new_path = os.path.join(root, new_name)
-                        if not os.path.exists(new_path):
-                            try:
-                                os.replace(path, new_path)
-                            except Exception:
-                                pass
+                        try:
+                            # If target exists, remove it so rename proceeds (ensures latest file kept)
+                            if os.path.exists(new_path):
+                                try:
+                                    os.remove(new_path)
+                                except Exception:
+                                    pass
+                            os.replace(path, new_path)
+                        except Exception:
+                            pass
                     processed.add(path)
         # Pass 2: ensure space before frame for plain (non-view) files e.g. main.0010000 -> main.001 0000
         for path in plain_candidates:
             if path in processed or not os.path.isfile(path):
                 continue
             name = os.path.basename(path)
+            # Handle pattern with numbers before suffix e.g. main.0010001_ALT.png -> main.001_ALT 0001.png
+            mnum = _num_before_suffix_pat.match(name)
+            if mnum:
+                b = mnum.group('base')
+                frame = mnum.group('frame')
+                tag = mnum.group('tag')  # includes leading underscore
+                ext_full = mnum.group('ext')
+                new_name_nb = f"{b}{tag} {frame}{ext_full}"
+                if new_name_nb != name:
+                    new_path_nb = os.path.join(os.path.dirname(path), new_name_nb)
+                    try:
+                        if os.path.exists(new_path_nb):
+                            os.remove(new_path_nb)
+                        os.replace(path, new_path_nb)
+                        name = new_name_nb  # update for further plain processing if needed
+                    except Exception:
+                        pass
             m = _plain_frame_pat.match(name)
             if not m:
                 continue
@@ -181,11 +204,12 @@ def _stereo_rename(job):
             new_name = f"{base} {frame}{ext_full}"
             if new_name != name:
                 new_path = os.path.join(os.path.dirname(path), new_name)
-                if not os.path.exists(new_path):
-                    try:
-                        os.replace(path, new_path)
-                    except Exception:
-                        pass
+                try:
+                    if os.path.exists(new_path):
+                        os.remove(new_path)
+                    os.replace(path, new_path)
+                except Exception:
+                    pass
         # Pass 3: remove plain duplicates if all expected view variants exist and user disabled plain
         try:
             keep_plain = getattr(job, 'stereo_keep_plain', True)
