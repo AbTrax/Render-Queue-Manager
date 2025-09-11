@@ -9,10 +9,11 @@
 ---
 
 ## ✨ Features
+
 - Per-job overrides: scene, camera, engine, resolution, animation range (remapped to start at frame 0 for consistent filenames).
 - Deterministic directory layout:
   - Base renders: `<root>/<job_name>/base/<basename><frame>.ext`
-  - Compositor outputs: `<root>/<job_name>/comp/<NodeName>/...`
+  - Compositor outputs: `<root>/<job_name>/<NodeName>/...` (no separate `comp/` folder)
 - Multiple Compositor File Output nodes per job (we only manage base path + optional format + default slot naming).
 - Smart slot naming: empty/default slot paths become `<job>_<basename>`.
 - Optional stereoscopic (multi‑view) rendering with selectable output format.
@@ -21,18 +22,23 @@
 - Windows‑safe name sanitizing (reserved device names avoided).
 
 ## 📦 Structure
-```
+
+```text
 __init__.py        # Add-on entry (bl_info + registers submodules)
 rqm/
   __init__.py      # Internal namespace
   utils.py         # Sanitizing, tokens, path helpers
   properties.py    # PropertyGroups (jobs, outputs, state)
-  outputs.py       # Compositor File Output handling
-  queue_ops.py     # Operators, handlers, job application
+  comp.py          # Compositor File Output handling & path resolution
+  operators_queue.py     # Queue operators and render loop
+  operators_outputs.py   # Output mapping operators
+  handlers.py      # Render handlers (complete/cancel)
   ui.py            # Panels & UILists
 ```
 
+
 ## 🔧 Installation
+
 1. Create a zip of the add-on root so the archive contains directly:
    - `__init__.py`
    - `rqm/` directory
@@ -41,6 +47,7 @@ rqm/
 4. Open the panel in Properties → Output tab.
 
 ## 🚀 Quick Start
+
 1. Open your target scene & camera.
 2. Add a job: Add Job (Current Scene/Camera).
 3. Adjust output folder (defaults to `//renders/`).
@@ -49,22 +56,30 @@ rqm/
 6. Press Start Queue.
 
 ## 📁 Folder & Naming Model
+
 For a job named `Shot01_MainCam` with basename `render`:
-```
+
+```text
 <output_root>/Shot01_MainCam/
   base/render0000.png …
   <FileOutputNodeName>/<job>_<basename>0000.png
 ```
+
 Animation frame range (e.g. 101–148) is internally remapped so exported files still begin at `0000`.
 
 ## 🎞️ Stereoscopy
+
 Enable per job. Choose:
+
 - Stereo 3D (combined)
 - Multi-View Images (separate left/right)
+
 If disabled, we restore standard single‑view output.
 
 ## 🧩 Compositor Outputs
+
 When enabled:
+
 1. Add one or more outputs.
 2. Choose (or auto-create) File Output nodes.
 3. Optionally pick base source: Job output folder, Scene output folder, or a folder inferred from a chosen file.
@@ -73,20 +88,12 @@ When enabled:
 
 Note: The previous “Detect View Tags” utility was removed. Use the free‑text Extra View Tags field to specify additional tags if needed.
 
-## 🔌 Extension Hooks
-Register a preprocessor to tweak the scene before each job render:
-```python
-import rqm
+## 🔌 Extensibility
 
-def force_cycles(job, scene):
-    scene.render.engine = 'CYCLES'
-    return True, ''
-
-rqm.queue_ops.JOB_PREPROCESSORS.append(force_cycles)
-```
-Return `(False, 'reason')` to skip the job (logged as a warning or failure depending on context).
+This add-on is structured as a package under `rqm/`. You can import modules (e.g., `rqm.jobs.apply_job`) from scripts to drive custom workflows, or fork and extend operators/handlers.
 
 ## 🐛 Troubleshooting
+
 | Issue | Cause | Fix |
 |-------|-------|-----|
 | Add-on fails: `No module named 'rqm'` | Zip contained an extra parent folder | Re-zip so `__init__.py` is at archive root |
@@ -95,6 +102,7 @@ Return `(False, 'reason')` to skip the job (logged as a warning or failure depen
 | Overwriting from multiple jobs | Same job name/basename | Ensure unique job names or change basename |
 
 ## ❓ FAQ
+
 **Why always start at 0000?**  Consistent naming prevents gaps and cross-project confusion when merging outputs.
 
 **Can I keep original frame numbers?** Not currently; a future option may allow an offset.
@@ -102,40 +110,49 @@ Return `(False, 'reason')` to skip the job (logged as a warning or failure depen
 **Does this change render settings permanently?** Only for the duration of the job; subsequent jobs override again.
 
 ## 🗺️ Roadmap (Potential)
+
 - Queue import/export (JSON)
 - Per-job color management & sampling overrides
 - Dependency ordering (render B after A)
 - Optional original frame numbering toggle
 
 ## 🤝 Contributing
+
 See `CONTRIBUTING.md`. Pull Requests welcome—keep changes modular.
 
 ## 📄 License
+
 MIT. See `LICENSE`.
 
 ## 🔢 Versioning
+
 Semantic-like tuple in `bl_info['version']`: (MAJOR, MINOR, PATCH). Patch = fixes / packaging, Minor = new features, Major = breaking changes.
 
 ## 🛠️ Building / Packaging
+
 You can build the distributable zip in three ways:
 
 PowerShell (auto-detect version):
-```
+
+```powershell
 pwsh scripts/build.ps1
 ```
 
 Specify version override:
-```
+
+```powershell
 pwsh scripts/build.ps1 -Version 1.10.6
 ```
 
 Cross-platform Python script:
-```
+
+```bash
 python scripts/package_addon.py
 ```
 
 Override version:
-```
+
+```bash
 python scripts/package_addon.py --version 1.10.6
 ```
 

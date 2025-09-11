@@ -1,7 +1,7 @@
 bl_info = {
     'name': 'Render Queue Manager',
     'author': 'Xnom3d',
-    'version': (1, 11, 2),
+    'version': (1, 11, 3),
     'blender': (3, 0, 0),
     'location': 'Properties > Output > Render Queue Manager',
     'description': 'Queue renders with per‑job folders & compositor outputs; modular package version.',
@@ -25,7 +25,7 @@ if any(m.startswith(_pkg_name + '.rqm') for m in list(sys.modules.keys())):
             except Exception:
                 pass
 
-from .rqm.properties import RQM_CompOutput, RQM_Job, RQM_State
+from .rqm.properties import RQM_CompOutput, RQM_Job, RQM_State, RQM_Tag
 from .rqm.operators_queue import (
     RQM_OT_AddFromCurrent, RQM_OT_AddCamerasInScene, RQM_OT_RemoveJob, RQM_OT_ClearQueue,
     RQM_OT_MoveJob, RQM_OT_StartQueue, RQM_OT_StopQueue,
@@ -38,11 +38,11 @@ from .rqm.ui import RQM_UL_Queue, RQM_UL_Outputs, RQM_UL_Tags, RQM_PT_Panel
 from .rqm import comp  # ensure compositor logic packaged
 from .rqm import handlers  # ensure handlers module present (for reload)
 
-import bpy
-from bpy.props import PointerProperty
+import bpy  # type: ignore
+from bpy.props import PointerProperty  # type: ignore
 
 classes = (
-    RQM_CompOutput, RQM_Job, RQM_State,
+    RQM_Tag, RQM_CompOutput, RQM_Job, RQM_State,
     RQM_OT_AddFromCurrent, RQM_OT_AddCamerasInScene, RQM_OT_RemoveJob, RQM_OT_ClearQueue,
     RQM_OT_MoveJob, RQM_OT_StartQueue, RQM_OT_StopQueue,
     RQM_OT_DuplicateJob,
@@ -68,11 +68,19 @@ def register():
         bpy.types.Scene.rqm_state = PointerProperty(type=RQM_State)
     # (Re)register handlers each time register() runs
     try:
+        handlers.unregister_handlers()
+    except Exception:
+        pass
+    try:
         handlers.register_handlers()
     except Exception:
         pass
 
 def unregister():
+    try:
+        handlers.unregister_handlers()
+    except Exception:
+        pass
     if hasattr(bpy.types.Scene, 'rqm_state'):
         try:
             del bpy.types.Scene.rqm_state

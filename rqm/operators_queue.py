@@ -2,13 +2,12 @@
 from __future__ import annotations
 import os
 import bpy  # type: ignore
-from bpy.types import Operator
-from bpy.props import IntProperty, EnumProperty
+from bpy.types import Operator  # type: ignore
+from bpy.props import IntProperty, EnumProperty  # type: ignore
 from .state import get_state
 from .properties import RQM_Job
 from .handlers import register_handlers
-from .utils import _sanitize_component, _ensure_dir
-from .comp import base_render_dir
+from .utils import _sanitize_component
 from .jobs import apply_job
 
 # ---- Local item callbacks (avoid lambda for Blender EnumProperty) ----

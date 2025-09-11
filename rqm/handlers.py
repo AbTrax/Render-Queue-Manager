@@ -11,7 +11,7 @@ import os, re, glob
 from .comp import base_render_dir
 from .state import get_state
 
-__all__ = ['register_handlers']
+__all__ = ['register_handlers', 'unregister_handlers']
 
 # We keep lightweight handlers and tag them to avoid duplicates.
 
@@ -55,6 +55,25 @@ def register_handlers():
             st._skip_increment_once = False
         _on_render_cancel._rqm_tag = True
         bpy.app.handlers.render_cancel.append(_on_render_cancel)
+
+def _remove_tagged(hlist):
+    try:
+        to_del = [h for h in hlist if getattr(h, '_rqm_tag', False)]
+        for h in to_del:
+            try:
+                hlist.remove(h)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+def unregister_handlers():
+    """Remove our tagged handlers to avoid duplicates across reloads."""
+    try:
+        _remove_tagged(bpy.app.handlers.render_complete)
+        _remove_tagged(bpy.app.handlers.render_cancel)
+    except Exception:
+        pass
 
 # ---- Internal helpers ----
 

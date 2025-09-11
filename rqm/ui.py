@@ -1,7 +1,7 @@
 """UI Lists and Panels for the add-on (legacy layout parity)."""
 from __future__ import annotations
 import bpy  # type: ignore
-from bpy.types import UIList, Panel
+from bpy.types import UIList, Panel  # type: ignore
 from .state import get_state
 
 __all__ = ['RQM_UL_Queue','RQM_UL_Outputs','RQM_UL_Tags','RQM_PT_Panel']

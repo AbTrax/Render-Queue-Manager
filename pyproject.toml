@@ -1,0 +1,24 @@
+[tool.black]
+line-length = 100
+target-version = ["py311", "py312", "py313"]
+skip-string-normalization = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["scripts/build.ps1"]
+
+[tool.ruff.lint]
+select = [
+  "E", "F",                 # pycodestyle + pyflakes
+  "I",                       # isort
+  "UP",                      # pyupgrade
+  "W",                       # warnings
+]
+ignore = [
+  "F401",  # unused imports (Blender dynamically needs some)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"rqm/*.py" = ["F401", "F403", "F405"]
+"__init__.py" = ["F401", "F403", "F405"]

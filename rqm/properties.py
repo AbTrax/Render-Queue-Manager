@@ -2,7 +2,7 @@
 from __future__ import annotations
 import os
 import bpy  # type: ignore  # Blender runtime provided
-from bpy.props import (
+from bpy.props import (  # type: ignore
     StringProperty, BoolProperty, IntProperty, EnumProperty,
     PointerProperty, CollectionProperty
 )

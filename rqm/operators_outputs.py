@@ -1,12 +1,9 @@
 """Compositor output related operators."""
 from __future__ import annotations
-import bpy
-from bpy.types import Operator
-from bpy.props import EnumProperty
+import bpy  # type: ignore
+from bpy.types import Operator  # type: ignore
+from bpy.props import EnumProperty  # type: ignore
 from .state import get_state
-import os, re, glob
-from .comp import base_render_dir
-from .properties import RQM_Job
 
 __all__ = ['RQM_OT_Output_Add','RQM_OT_Output_Remove','RQM_OT_Output_Move']
 

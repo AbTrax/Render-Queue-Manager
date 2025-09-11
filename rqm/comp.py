@@ -1,7 +1,7 @@
 """Compositor output and path resolution logic (ported from monolithic version)."""
 from __future__ import annotations
 import os
-import bpy
+import bpy  # type: ignore
 from .utils import (
     _sanitize_component, _sanitize_subpath, _tokens,
     _ensure_dir, _scene_output_dir, _valid_node_format
