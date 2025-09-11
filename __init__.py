@@ -1,7 +1,7 @@
 bl_info = {
     'name': 'Render Queue Manager',
     'author': 'Xnom3d',
-    'version': (1, 11, 1),
+    'version': (1, 11, 2),
     'blender': (3, 0, 0),
     'location': 'Properties > Output > Render Queue Manager',
     'description': 'Queue renders with per‑job folders & compositor outputs; modular package version.',
@@ -32,7 +32,7 @@ from .rqm.operators_queue import (
     RQM_OT_DuplicateJob
 )
 from .rqm.operators_outputs import (
-    RQM_OT_Output_Add, RQM_OT_Output_Remove, RQM_OT_Output_Move, RQM_OT_DetectTags
+    RQM_OT_Output_Add, RQM_OT_Output_Remove, RQM_OT_Output_Move
 )
 from .rqm.ui import RQM_UL_Queue, RQM_UL_Outputs, RQM_UL_Tags, RQM_PT_Panel
 from .rqm import comp  # ensure compositor logic packaged
@@ -46,7 +46,7 @@ classes = (
     RQM_OT_AddFromCurrent, RQM_OT_AddCamerasInScene, RQM_OT_RemoveJob, RQM_OT_ClearQueue,
     RQM_OT_MoveJob, RQM_OT_StartQueue, RQM_OT_StopQueue,
     RQM_OT_DuplicateJob,
-    RQM_OT_Output_Add, RQM_OT_Output_Remove, RQM_OT_Output_Move, RQM_OT_DetectTags,
+    RQM_OT_Output_Add, RQM_OT_Output_Remove, RQM_OT_Output_Move,
     RQM_UL_Queue, RQM_UL_Outputs, RQM_UL_Tags, RQM_PT_Panel,
 )
 
