@@ -191,15 +191,17 @@ class RQM_OT_StartQueue(Operator):
             return {'FINISHED'}
         # Fallback: if we think a render is in progress but Blender reports none, advance
         if st.render_in_progress:
+            stalled = False
             try:
-                # bpy.app.is_job_running('RENDER') returns False when no render
                 if not bpy.app.is_job_running('RENDER'):
-                    print('[RQM] Detected stalled render flag, auto-advancing queue.')
-                    st.render_in_progress = False
-                    st.current_job_index += 1
-                    return {'PASS_THROUGH'}
+                    stalled = True
             except Exception:
                 pass
+            if stalled:
+                print('[RQM] Detected stalled render flag, auto-advancing queue.')
+                st._skip_increment_once = True  # prevent handler increment duplication
+                st.render_in_progress = False
+                st.current_job_index += 1
             return {'PASS_THROUGH'}
         job = st.queue[st.current_job_index]
         ok, msg = apply_job(job)
@@ -209,7 +211,7 @@ class RQM_OT_StartQueue(Operator):
             return {'PASS_THROUGH'}
         st.render_in_progress = True
         try:
-            # Use EXEC_DEFAULT for reliability when non-interactive / background focus loss
+            # Use EXEC_DEFAULT to avoid needing the Image Editor foreground; more reliable unattended.
             if job.use_animation:
                 bpy.ops.render.render('EXEC_DEFAULT', animation=True)
             else:

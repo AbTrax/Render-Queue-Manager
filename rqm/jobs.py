@@ -76,6 +76,12 @@ def apply_job(job: RQM_Job):
         scn.frame_current = 0
     safe_base = _sanitize_component(job.file_basename or 'render')
     scn.render.image_settings.file_format = job.file_format or 'PNG'
+    # Ensure compositing enabled so File Output nodes run
+    try:
+        if hasattr(scn.render, 'use_compositing'):
+            scn.render.use_compositing = True
+    except Exception:
+        pass
     bdir = base_render_dir(job)
     _ensure_dir(bdir)
     # Pre-create compositor root as well to reduce race conditions for File Output nodes

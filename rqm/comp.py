@@ -21,7 +21,8 @@ def base_render_dir(job: RQM_Job) -> str:
     return os.path.join(job_root_dir(job), 'base')
 
 def comp_root_dir(job: RQM_Job) -> str:
-    return os.path.join(job_root_dir(job), 'comp')
+    # Flatten structure: compositor outputs share job root (no separate 'comp' folder)
+    return job_root_dir(job)
 
 def get_file_output_node(scn, out: RQM_CompOutput):
     if not scn:
@@ -104,6 +105,26 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
         for fs in node.file_slots:
             if not fs.path or fs.path.lower() in {'image','render'}:
                 fs.path = target_prefix
+    except Exception:
+        pass
+    # Auto-link first unlinked input to Render Layers if possible (helps ensure node writes files)
+    try:
+        nt = scn.node_tree
+        rl = None
+        for n in nt.nodes:
+            if n.bl_idname in {'CompositorNodeRLayers','CompositorNodeRenderLayers'}:
+                rl = n; break
+        if rl and node.inputs:
+            for sock in node.inputs:
+                if not sock.is_linked and rl.outputs:
+                    nt.links.new(rl.outputs[0], sock)
+                    break
+    except Exception:
+        pass
+    print(f"[RQM] Compositor node '{node.name}' -> {base_dir}")
+    try:
+        for fs in node.file_slots:
+            print(f"[RQM]   slot '{fs.path}'")
     except Exception:
         pass
     return True, 'OK'
