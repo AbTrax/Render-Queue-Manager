@@ -104,6 +104,10 @@ class RQM_PT_Panel(Panel):
             if getattr(job, 'use_stereoscopy', False):
                 if hasattr(job, 'stereo_views_format'):
                     col.prop(job, 'stereo_views_format', text='Views')
+                if hasattr(job, 'stereo_extra_tags'):
+                    col.prop(job, 'stereo_extra_tags')
+                if hasattr(job, 'stereo_keep_plain'):
+                    col.prop(job, 'stereo_keep_plain')
 
             col.separator()
             col.label(text='Compositor Outputs (optional)', icon='NODE_COMPOSITING')

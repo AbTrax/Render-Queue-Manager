@@ -91,7 +91,9 @@ def apply_job(job: RQM_Job):
     except Exception:
         pass
     # Ensure trailing separator then base name (Blender appends frame + view identifiers automatically)
-    scn.render.filepath = os.path.join(bdir, '') + safe_base
+    # Add space after base so Blender writes 'basename 0000.ext'
+    base_with_space = safe_base + ' ' if not safe_base.endswith(' ') else safe_base
+    scn.render.filepath = os.path.join(bdir, '') + base_with_space
     if job.use_comp_outputs and len(job.comp_outputs) > 0:
         errors = []
         for out in job.comp_outputs:

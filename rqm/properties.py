@@ -70,6 +70,10 @@ class RQM_Job(PropertyGroup):
         ('STEREO_3D', 'Stereo 3D', 'Left and Right views'),
         ('MULTIVIEW', 'Multi-View', 'Use scene multi-view configuration')
     ], default='STEREO_3D', description='How to configure view rendering for this job')
+    stereo_extra_tags: StringProperty(name='Extra view tags', default='',
+        description='Optional extra view identifiers (comma or space separated). Example: "ALT QA" -> produces _ALT and _QA tags')
+    stereo_keep_plain: BoolProperty(name='Keep plain fallback', default=True,
+        description='If off, plain (untagged) files are deleted once all view-tagged files for that frame exist')
 
 class RQM_State(PropertyGroup):
     queue: CollectionProperty(type=RQM_Job)

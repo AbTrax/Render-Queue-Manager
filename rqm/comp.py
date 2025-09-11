@@ -98,13 +98,21 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
             pass
     safe_job = _sanitize_component(job.name or 'job')
     safe_base = _sanitize_component(job.file_basename or 'render')
-    target_prefix = f'{safe_job}_{safe_base}'
+    # Avoid duplicate job name if basename already starts with it
+    if safe_base.lower().startswith(safe_job.lower() + '_'):
+        target_prefix = safe_base
+    else:
+        target_prefix = f'{safe_job}_{safe_base}'
+    # Ensure a space at end so frames become '<prefix> 0000'
+    if not target_prefix.endswith(' '):
+        target_prefix = target_prefix + ' '
     _ensure_min_slot(node, target_prefix)
     # Only override default/empty slot names ('', 'image', 'render') to avoid clobbering user custom slot paths
     try:
         for fs in node.file_slots:
             if not fs.path or fs.path.lower() in {'image','render'}:
                 fs.path = target_prefix
+            # If user custom path lacks trailing space, optionally keep as-is (don't force)
     except Exception:
         pass
     # Auto-link first unlinked input to Render Layers if possible (helps ensure node writes files)
