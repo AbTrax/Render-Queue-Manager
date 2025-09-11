@@ -79,6 +79,12 @@ class RQM_PT_Panel(Panel):
 
             box = layout.box()
             top_row = box.row(align=True)
+            # Make the Name field more flush with minimal left padding
+            try:
+                top_row.use_property_split = False
+                top_row.use_property_decorate = False
+            except Exception:
+                pass
             top_row.prop(job, 'name', text='Name')
 
             row = box.row()

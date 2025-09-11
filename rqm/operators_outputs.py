@@ -13,6 +13,7 @@ __all__ = ['RQM_OT_Output_Add','RQM_OT_Output_Remove','RQM_OT_Output_Move','RQM_
 class RQM_OT_Output_Add(Operator):
     bl_idname = 'rqm.output_add'
     bl_label = 'Add Compositor Output'
+    bl_description = 'Add a new Compositor File Output mapping to this job'
     bl_options = {'REGISTER','UNDO'}
     def execute(self, context):
         st = get_state(context)
@@ -34,6 +35,7 @@ class RQM_OT_Output_Add(Operator):
 class RQM_OT_Output_Remove(Operator):
     bl_idname = 'rqm.output_remove'
     bl_label = 'Remove Compositor Output'
+    bl_description = 'Remove the selected Compositor File Output mapping'
     bl_options = {'REGISTER','UNDO'}
     def execute(self, context):
         st = get_state(context)
@@ -49,6 +51,7 @@ class RQM_OT_Output_Remove(Operator):
 class RQM_OT_Output_Move(Operator):
     bl_idname = 'rqm.output_move'
     bl_label = 'Move Compositor Output'
+    bl_description = 'Move the selected Compositor File Output mapping up or down'
     bl_options = {'REGISTER','UNDO'}
     direction: EnumProperty(items=[('UP','Up',''),('DOWN','Down','')])
     def execute(self, context):
@@ -70,6 +73,7 @@ class RQM_OT_Output_Move(Operator):
 class RQM_OT_DetectTags(Operator):
     bl_idname = 'rqm.detect_tags'
     bl_label = 'Detect View Tags'
+    bl_description = 'Scan the output folder for alternate view tags and add them to the list'
     bl_options = {'REGISTER'}
     def execute(self, context):
         st = get_state(context)
