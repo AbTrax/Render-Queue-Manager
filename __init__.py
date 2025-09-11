@@ -1,7 +1,7 @@
 bl_info = {
     'name': 'Render Queue Manager',
-    'author': 'Xnom3d (modularized)',
-    'version': (1, 10, 12),  # incremented for hot-reload capability
+    'author': 'Xnom3d',
+    'version': (1, 10, 13),
     'blender': (3, 0, 0),
     'location': 'Properties > Output > Render Queue Manager',
     'description': 'Queue renders with per‑job folders & compositor outputs; modular package version.',

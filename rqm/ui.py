@@ -11,18 +11,10 @@ class RQM_UL_Queue(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT','COMPACT'}:
             row = layout.row(align=True)
-            # Enable toggle
-            if hasattr(item, 'enabled'):
-                row.prop(item, 'enabled', text='')
-            # Name
+            # Keep row clean: just name and context
             row.prop(item, 'name', text='', emboss=False, icon='RENDER_RESULT')
             cam_part = item.camera_name or '<no cam>'
             row.label(text=f"{item.scene_name}:{cam_part}")
-            # Duplicate & delete inline
-            dup = row.operator('rqm.duplicate_job', text='', icon='DUPLICATE')
-            dup.index = index
-            rem = row.operator('rqm.remove_job', text='', icon='X')
-            rem.index = index
         else:
             layout.alignment = 'CENTER'
             layout.label(text='', icon='RENDER_RESULT')
@@ -69,12 +61,18 @@ class RQM_PT_Panel(Panel):
         header.operator('rqm.add_from_current', icon='ADD')
         header.operator('rqm.add_cameras_in_scene', icon='OUTLINER_OB_CAMERA')
         header.operator('rqm.clear_queue', icon='TRASH')
-        header.operator('rqm.enable_all_jobs', icon='CHECKMARK')
-        header.operator('rqm.disable_all_jobs', icon='CANCEL')
-        dupop = header.operator('rqm.duplicate_job', icon='DUPLICATE')
-        dupop.index = st.active_index
 
-        layout.template_list('RQM_UL_Queue', '', st, 'queue', st, 'active_index', rows=6)
+        row_list = layout.row()
+        row_list.template_list('RQM_UL_Queue', '', st, 'queue', st, 'active_index', rows=6)
+        side = row_list.column(align=True)
+        if 0 <= st.active_index < len(st.queue):
+            job_side = st.queue[st.active_index]
+            if hasattr(job_side, 'enabled'):
+                side.prop(job_side, 'enabled', text='')
+            dup = side.operator('rqm.duplicate_job', text='', icon='DUPLICATE')
+            dup.index = st.active_index
+            rem = side.operator('rqm.remove_job', text='', icon='X')
+            rem.index = st.active_index
 
         if 0 <= st.active_index < len(st.queue):
             job = st.queue[st.active_index]
