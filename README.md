@@ -10,12 +10,13 @@
 
 ## ✨ Features
 
-- Per-job overrides: scene, camera, engine, resolution, animation range (remapped to start at frame 0 for consistent filenames).
-- Deterministic directory layout:
+- Per-job overrides: scene, camera, view layers, engine, resolution, animation range (remapped to start at frame 0 for consistent filenames).
+- Deterministic directory layout (with optional job-name suffixes for generated folders):
   - Base renders: `<root>/<job_name>/base/<basename><frame>.ext`
   - Compositor outputs: `<root>/<job_name>/<NodeName>/...` (no separate `comp/` folder)
 - Multiple Compositor File Output nodes per job (we only manage base path + optional format + default slot naming).
 - Smart slot naming: empty/default slot paths become `<job>_<basename>`.
+- Marker-linked frame ranges: when markers move, linked jobs update their start/end frames automatically.
 - Optional stereoscopic (multi‑view) rendering with selectable output format.
 - Non‑blocking compositor mode (warn instead of abort) per job.
 - Pluggable preprocessors: inject logic before each job via `JOB_PREPROCESSORS`.
@@ -64,6 +65,8 @@ For a job named `Shot01_MainCam` with basename `render`:
   base/render0000.png …
   <FileOutputNodeName>/<job>_<basename>0000.png
 ```
+
+Enable **Suffix folders with job name** on a job to automatically append `_JobName` to generated render and compositor directories when you need extra disambiguation.
 
 Animation frame range (e.g. 101–148) is internally remapped so exported files still begin at `0000`.
 

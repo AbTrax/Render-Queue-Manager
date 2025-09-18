@@ -13,12 +13,34 @@ __all__ = [
     'get_file_output_node','resolve_base_dir','sync_one_output'
 ]
 
+
+def _append_job_suffix(folder: str, job: RQM_Job) -> str:
+    if not getattr(job, 'suffix_output_folders_with_job', False):
+        return folder
+    safe_job = _sanitize_component(job.name or 'job')
+    if not safe_job:
+        return folder
+    stripped = folder.rstrip('/\\')
+    if not stripped:
+        return folder
+    tail = os.path.basename(stripped)
+    if not tail:
+        return folder
+    if tail.lower() == safe_job.lower() or tail.lower().endswith('_' + safe_job.lower()):
+        return folder
+    parent = os.path.dirname(stripped)
+    new_tail = f'{tail}_{safe_job}'
+    if parent:
+        return os.path.join(parent, new_tail)
+    return new_tail
+
 def job_root_dir(job: RQM_Job) -> str:
     root = bpy.path.abspath(job.output_path)
     return os.path.join(root, _sanitize_component(job.name or 'job'))
 
 def base_render_dir(job: RQM_Job) -> str:
-    return os.path.join(job_root_dir(job), 'base')
+    base = os.path.join(job_root_dir(job), 'base')
+    return _append_job_suffix(base, job)
 
 def comp_root_dir(job: RQM_Job) -> str:
     # Flatten structure: compositor outputs share job root (no separate 'comp' folder)
@@ -60,6 +82,7 @@ def resolve_base_dir(scn, job: RQM_Job, out: RQM_CompOutput, node_name: str):
         if not out.base_file:
             return None, "You chose 'Folder of a chosen file' but no file was picked."
         base_dir = os.path.dirname(bpy.path.abspath(out.base_file))
+    base_dir = _append_job_suffix(base_dir, job)
 
     if out.use_node_named_subfolder:
         node_sub = _sanitize_component(node_name or 'Composite')

@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.13.0] - 2025-09-12
+
+### Added
+
+- Per-job view layer selection with UI picker and render-time enforcement.
+- Optional job-name suffix for generated render/compositor folders.
+- Automatic sync to keep marker-linked frame ranges aligned when timeline markers move.
+
+### Improved
+
+- Camera batch creation now records the active view layer for each generated job.
+
 ## [1.11.2] - 2025-09-11
 
 ### Removed (Stereoscopy UI)

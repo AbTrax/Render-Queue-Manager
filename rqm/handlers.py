@@ -18,7 +18,11 @@ __all__ = ['register_handlers', 'unregister_handlers']
 def _tagged(hlist):
     return any(getattr(h, '_rqm_tag', False) for h in hlist)
 
+
+_marker_cache = {}
+
 def register_handlers():
+    _marker_cache.clear()
     if not _tagged(bpy.app.handlers.render_complete):
         def _on_render_complete(_):
             st = bpy.context.scene.rqm_state
@@ -56,6 +60,15 @@ def register_handlers():
         _on_render_cancel._rqm_tag = True
         bpy.app.handlers.render_cancel.append(_on_render_cancel)
 
+    if not _tagged(bpy.app.handlers.depsgraph_update_post):
+        def _on_depsgraph_update(scene, depsgraph):
+            try:
+                _sync_marker_links()
+            except Exception:
+                pass
+        _on_depsgraph_update._rqm_tag = True
+        bpy.app.handlers.depsgraph_update_post.append(_on_depsgraph_update)
+
 def _remove_tagged(hlist):
     try:
         to_del = [h for h in hlist if getattr(h, '_rqm_tag', False)]
@@ -72,6 +85,7 @@ def unregister_handlers():
     try:
         _remove_tagged(bpy.app.handlers.render_complete)
         _remove_tagged(bpy.app.handlers.render_cancel)
+        _remove_tagged(bpy.app.handlers.depsgraph_update_post)
     except Exception:
         pass
 
@@ -112,6 +126,63 @@ def _parse_extra_tags(raw: str):
         if piece not in tags and piece not in {'L','R','LEFT','RIGHT'}:
             tags.append(piece)
     return tags
+
+
+def _sync_one_marker(job, scn, is_start: bool):
+    key = (job.as_pointer(), 'start' if is_start else 'end')
+    link_both = getattr(job, 'link_timeline_markers', False)
+    if is_start:
+        enabled = link_both or getattr(job, 'link_marker', False)
+        marker_name = getattr(job, 'marker_name', '')
+        offset_val = getattr(job, 'marker_offset', 0)
+        target_attr = 'frame_start'
+    else:
+        enabled = link_both or getattr(job, 'link_end_marker', False)
+        marker_name = getattr(job, 'end_marker_name', '')
+        offset_val = getattr(job, 'end_marker_offset', 0)
+        target_attr = 'frame_end'
+    if not enabled or not marker_name:
+        _marker_cache.pop(key, None)
+        return
+    marker = scn.timeline_markers.get(marker_name)
+    if not marker:
+        return
+    try:
+        base_frame = int(marker.frame)
+    except Exception:
+        return
+    try:
+        offset = int(offset_val)
+    except Exception:
+        offset = 0
+    desired = base_frame + offset
+    prev = _marker_cache.get(key)
+    if prev == (base_frame, offset) and getattr(job, target_attr, None) == desired:
+        return
+    _marker_cache[key] = (base_frame, offset)
+    try:
+        if getattr(job, target_attr) != desired:
+            setattr(job, target_attr, desired)
+    except Exception:
+        pass
+
+
+def _sync_marker_links():
+    try:
+        scenes = list(bpy.data.scenes)
+    except Exception:
+        scenes = []
+    for scn in scenes:
+        state = getattr(scn, 'rqm_state', None)
+        if not state:
+            continue
+        for job in state.queue:
+            target_scene = bpy.data.scenes.get(job.scene_name) if getattr(job, 'scene_name', '') else scn
+            if not target_scene:
+                continue
+            _sync_one_marker(job, target_scene, True)
+            _sync_one_marker(job, target_scene, False)
+
 
 def _stereo_rename(job):
     try:

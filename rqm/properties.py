@@ -15,7 +15,14 @@ from bpy.props import (  # type: ignore
 )
 from bpy.types import PropertyGroup  # type: ignore
 
-from .utils import FILE_FORMAT_ITEMS, _sanitize_component, camera_items, engine_items, scene_items
+from .utils import (
+    FILE_FORMAT_ITEMS,
+    _sanitize_component,
+    camera_items,
+    engine_items,
+    scene_items,
+    view_layer_items,
+)
 
 __all__ = ['RQM_CompOutput', 'RQM_Job', 'RQM_State', 'RQM_Tag']
 
@@ -68,6 +75,12 @@ class RQM_Job(PropertyGroup):
     name: StringProperty(name='Job Name', default='')
     scene_name: EnumProperty(name='Scene', items=scene_items)
     camera_name: EnumProperty(name='Camera', items=camera_items)
+    view_layers: EnumProperty(
+        name='View Layers',
+        items=view_layer_items,
+        options={'ENUM_FLAG'},
+        description='View layers to enable for this job (empty = scene defaults)',
+    )
     engine: EnumProperty(name='Engine', items=engine_items)
 
     res_x: IntProperty(name='Width', default=1920, min=4)
@@ -113,6 +126,11 @@ class RQM_Job(PropertyGroup):
         name='Render filename',
         default='render',
         description="Prefix for main render files (sanitised). Example: 'beauty' -> beauty0001.png",
+    )
+    suffix_output_folders_with_job: BoolProperty(
+        name='Suffix folders with job name',
+        default=False,
+        description='Append the job name to generated render and compositor folders',
     )
     rebase_numbering: BoolProperty(
         name='Number files from 0',

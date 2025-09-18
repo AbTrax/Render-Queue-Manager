@@ -6,9 +6,18 @@ import os, re
 import bpy
 
 __all__ = [
-    'FILE_FORMAT_ITEMS','scene_items','camera_items','engine_items',
-    '_sanitize_component','_sanitize_subpath','_tokens','_ensure_dir',
-    '_scene_output_dir','_valid_node_format'
+    'FILE_FORMAT_ITEMS',
+    'scene_items',
+    'camera_items',
+    'engine_items',
+    'view_layer_items',
+    'view_layer_identifier_map',
+    '_sanitize_component',
+    '_sanitize_subpath',
+    '_tokens',
+    '_ensure_dir',
+    '_scene_output_dir',
+    '_valid_node_format',
 ]
 
 FILE_FORMAT_ITEMS = [
@@ -28,6 +37,48 @@ def camera_items(self, context):
                 cams.append((ob.name, ob.name, ''))
     return cams or [('', '<no cameras>', '')]
 
+_re_view_layer_id = re.compile(r'[^A-Za-z0-9_]')
+
+
+def _view_layer_id_base(name: str) -> str:
+    cleaned = _re_view_layer_id.sub('_', name or '')
+    cleaned = cleaned.strip('_') or 'VIEW_LAYER'
+    if cleaned[0].isdigit():
+        cleaned = f'_{cleaned}'
+    return cleaned[:63]
+
+
+def view_layer_identifier_map(scn):
+    mapping = {}
+    if not scn:
+        return mapping
+    used = set()
+    try:
+        for layer in scn.view_layers:
+            base = _view_layer_id_base(layer.name)
+            ident = base
+            index = 1
+            while ident in used:
+                ident = f'{base}_{index}'
+                index += 1
+            used.add(ident)
+            mapping[ident] = layer
+    except Exception:
+        return {}
+    return mapping
+
+
+def view_layer_items(self, context):
+    scn = (
+        bpy.data.scenes.get(getattr(self, 'scene_name', ''))
+        if getattr(self, 'scene_name', None)
+        else None
+    )
+    mapping = view_layer_identifier_map(scn)
+    if not mapping:
+        return [('', '<no view layers>', '')]
+    return [(identifier, layer.name or identifier, '') for identifier, layer in mapping.items()]
+
 def engine_items(self, context):
     seen, items = set(), []
     try:
@@ -39,6 +90,8 @@ def engine_items(self, context):
         pass
     if 'CYCLES' not in seen:
         items.append(('CYCLES', 'Cycles', 'Cycles Render Engine'))
+    if 'BLENDER_WORKBENCH' not in seen:
+        items.append(('BLENDER_WORKBENCH', 'Workbench', 'Workbench render engine'))
     return items or [('BLENDER_EEVEE', 'Eevee', 'Eevee Render Engine')]
 
 _valid_node_formats = {'PNG','OPEN_EXR','OPEN_EXR_MULTILAYER','JPEG','BMP','TIFF'}

@@ -12,7 +12,7 @@ from .handlers import register_handlers
 from .jobs import apply_job
 from .properties import RQM_Job
 from .state import get_state
-from .utils import _sanitize_component
+from .utils import _sanitize_component, view_layer_identifier_map
 
 
 # ---- Local item callbacks (avoid lambda for Blender EnumProperty) ----
@@ -49,6 +49,19 @@ class RQM_OT_AddFromCurrent(Operator):
         job.scene_name = scn.name
         job.camera_name = scn.camera.name if scn.camera else ''
         job.engine = scn.render.engine
+        if hasattr(job, 'view_layers'):
+            mapping = view_layer_identifier_map(scn)
+            try:
+                active_name = context.view_layer.name if context.view_layer else ''
+            except Exception:
+                active_name = ''
+            if active_name:
+                identifier = next(
+                    (ident for ident, layer in mapping.items() if layer.name == active_name),
+                    '',
+                )
+                if identifier:
+                    job.view_layers = {identifier}
         job.res_x = scn.render.resolution_x
         job.res_y = scn.render.resolution_y
         job.percent = scn.render.resolution_percentage
@@ -111,6 +124,29 @@ class RQM_OT_AddCamerasInScene(Operator):
             job.scene_name = scn.name
             job.camera_name = cam.name
             job.engine = scn.render.engine
+            if hasattr(job, 'view_layers'):
+                mapping = view_layer_identifier_map(scn)
+                active_layer = None
+                try:
+                    active_layer = getattr(scn.view_layers, 'active', None)
+                except Exception:
+                    active_layer = None
+                if not active_layer:
+                    try:
+                        active_layer = scn.view_layers[0]
+                    except Exception:
+                        active_layer = None
+                if active_layer:
+                    identifier = next(
+                        (
+                            ident
+                            for ident, layer in mapping.items()
+                            if layer.name == active_layer.name
+                        ),
+                        '',
+                    )
+                    if identifier:
+                        job.view_layers = {identifier}
             job.res_x = scn.render.resolution_x
             job.res_y = scn.render.resolution_y
             job.percent = scn.render.resolution_percentage
@@ -195,6 +231,7 @@ class RQM_OT_DuplicateJob(Operator):
             'enabled',
             'scene_name',
             'camera_name',
+            'view_layers',
             'engine',
             'res_x',
             'res_y',
@@ -212,6 +249,7 @@ class RQM_OT_DuplicateJob(Operator):
             'file_format',
             'output_path',
             'file_basename',
+            'suffix_output_folders_with_job',
             'rebase_numbering',
             'use_comp_outputs',
             'comp_outputs_non_blocking',

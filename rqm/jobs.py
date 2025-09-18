@@ -2,7 +2,7 @@
 from __future__ import annotations
 import os
 import bpy  # type: ignore
-from .utils import _sanitize_component, _ensure_dir
+from .utils import _sanitize_component, _ensure_dir, view_layer_identifier_map
 from .comp import base_render_dir, sync_one_output
 from .properties import RQM_Job
 
@@ -24,6 +24,41 @@ def apply_job(job: RQM_Job):
         cam_obj = bpy.data.objects.get(job.camera_name)
         if cam_obj and cam_obj.type == 'CAMERA':
             scn.camera = cam_obj
+    try:
+        selected_prop = getattr(job, 'view_layers', None)
+        if isinstance(selected_prop, str):
+            selected_ids = [selected_prop] if selected_prop else []
+        elif isinstance(selected_prop, (set, list, tuple)):
+            selected_ids = [s for s in selected_prop if s]
+        else:
+            selected_ids = []
+        if selected_ids:
+            mapping = view_layer_identifier_map(scn)
+            if mapping:
+                selected_lookup = set(selected_ids)
+                for ident, layer in mapping.items():
+                    should_enable = ident in selected_lookup
+                    try:
+                        layer.use = should_enable
+                    except Exception:
+                        pass
+                for ident in selected_ids:
+                    layer = mapping.get(ident)
+                    if not layer:
+                        continue
+                    try:
+                        bpy.context.window.view_layer = layer
+                    except Exception:
+                        try:
+                            bpy.context.view_layer = layer
+                        except Exception:
+                            pass
+                        else:
+                            break
+                    else:
+                        break
+    except Exception:
+        pass
     scn.render.resolution_x = job.res_x
     scn.render.resolution_y = job.res_y
     scn.render.resolution_percentage = job.percent

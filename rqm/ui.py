@@ -102,6 +102,9 @@ class RQM_PT_Panel(Panel):
             row = box.row()
             row.prop(job, 'scene_name', text='Scene')
             row.prop(job, 'camera_name', text='Camera')
+            if hasattr(job, 'view_layers'):
+                row = box.row()
+                row.prop(job, 'view_layers', text='View Layers')
 
             row = box.row()
             row.prop(job, 'engine', text='Render Engine')
@@ -146,6 +149,8 @@ class RQM_PT_Panel(Panel):
             col.prop(job, 'file_format')
             col.prop(job, 'output_path')
             col.prop(job, 'file_basename')
+            if hasattr(job, 'suffix_output_folders_with_job'):
+                col.prop(job, 'suffix_output_folders_with_job')
             if job.use_animation and hasattr(job, 'rebase_numbering'):
                 col.prop(job, 'rebase_numbering')
 
