@@ -21,6 +21,62 @@ def _operator_scene_items(self, context):
     return items or [('', '<no scenes>', '')]
 
 
+
+def _enabled_view_layer_ids(mapping):
+    selected = []
+    for ident, layer in mapping.items():
+        try:
+            if getattr(layer, 'use', True):
+                selected.append(ident)
+        except Exception:
+            selected.append(ident)
+    return selected
+
+
+
+def _prefill_job_view_layers(job, mapping, fallback_layer):
+    if not hasattr(job, 'view_layers') or not mapping:
+        return
+    identifiers = _enabled_view_layer_ids(mapping)
+    if identifiers:
+        _set_job_view_layers(job, mapping, identifiers)
+        return
+    if not fallback_layer:
+        return
+    fallback_name = getattr(fallback_layer, 'name', None)
+    if not fallback_name:
+        return
+    identifier = next(
+        (ident for ident, layer in mapping.items() if getattr(layer, 'name', None) == fallback_name),
+        '',
+    )
+    if identifier:
+        _set_job_view_layers(job, mapping, [identifier])
+
+
+
+def _set_job_view_layers(job, mapping, identifiers):
+    if not hasattr(job, 'view_layers'):
+        return
+    if isinstance(identifiers, str):
+        identifiers = [identifiers] if identifiers else []
+    else:
+        identifiers = list(identifiers) if identifiers else []
+    valid = [ident for ident in identifiers if ident in mapping]
+    if not valid:
+        return
+    try:
+        job.view_layers = set(valid)
+    except Exception:
+        for ident in valid:
+            try:
+                job.view_layers = {ident}
+            except Exception:
+                continue
+            else:
+                break
+
+
 __all__ = [
     'RQM_OT_AddFromCurrent',
     'RQM_OT_AddCamerasInScene',
@@ -51,17 +107,12 @@ class RQM_OT_AddFromCurrent(Operator):
         job.engine = scn.render.engine
         if hasattr(job, 'view_layers'):
             mapping = view_layer_identifier_map(scn)
+            fallback_layer = None
             try:
-                active_name = context.view_layer.name if context.view_layer else ''
+                fallback_layer = context.view_layer if context.view_layer else None
             except Exception:
-                active_name = ''
-            if active_name:
-                identifier = next(
-                    (ident for ident, layer in mapping.items() if layer.name == active_name),
-                    '',
-                )
-                if identifier:
-                    job.view_layers = {identifier}
+                fallback_layer = None
+            _prefill_job_view_layers(job, mapping, fallback_layer)
         job.res_x = scn.render.resolution_x
         job.res_y = scn.render.resolution_y
         job.percent = scn.render.resolution_percentage
@@ -136,17 +187,7 @@ class RQM_OT_AddCamerasInScene(Operator):
                         active_layer = scn.view_layers[0]
                     except Exception:
                         active_layer = None
-                if active_layer:
-                    identifier = next(
-                        (
-                            ident
-                            for ident, layer in mapping.items()
-                            if layer.name == active_layer.name
-                        ),
-                        '',
-                    )
-                    if identifier:
-                        job.view_layers = {identifier}
+                _prefill_job_view_layers(job, mapping, active_layer)
             job.res_x = scn.render.resolution_x
             job.res_y = scn.render.resolution_y
             job.percent = scn.render.resolution_percentage
