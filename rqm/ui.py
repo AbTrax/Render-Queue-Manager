@@ -103,8 +103,21 @@ class RQM_PT_Panel(Panel):
             row.prop(job, 'scene_name', text='Scene')
             row.prop(job, 'camera_name', text='Camera')
             if hasattr(job, 'view_layers'):
+                # Cleaner multi-select as a dropdown with dynamic label
                 row = box.row()
-                row.prop(job, 'view_layers', text='View Layers')
+                try:
+                    sel = getattr(job, 'view_layers', set())
+                    if isinstance(sel, str):
+                        selected = {sel} if sel else set()
+                    else:
+                        selected = set(sel)
+                except Exception:
+                    selected = set()
+                label = 'View Layers'
+                if selected:
+                    label = f'View Layers ({len(selected)})'
+                # prop_menu_enum opens a dropdown menu where items can be toggled (ENUM_FLAG)
+                row.prop_menu_enum(job, 'view_layers', text=label, icon='DOWNARROW_HLT')
 
             row = box.row()
             row.prop(job, 'engine', text='Render Engine')
