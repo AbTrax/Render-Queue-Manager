@@ -121,6 +121,10 @@ class RQM_PT_Panel(Panel):
 
             row = box.row()
             row.prop(job, 'engine', text='Render Engine')
+            if hasattr(job, 'use_persistent_data'):
+                pd_row = box.row()
+                pd_row.enabled = job.engine == 'CYCLES'
+                pd_row.prop(job, 'use_persistent_data', text='Persistent Data (Cycles)')
 
             col = box.column(align=True)
             col.label(text='Resolution')

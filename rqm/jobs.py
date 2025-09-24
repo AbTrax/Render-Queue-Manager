@@ -20,6 +20,21 @@ def apply_job(job: RQM_Job):
         scn.render.engine = job.engine
     except Exception:
         return False, f"Engine '{job.engine}' not available on this build."
+    persistent_flag = getattr(job, 'use_persistent_data', None)
+    if persistent_flag is not None:
+        try:
+            if hasattr(scn.render, 'use_persistent_data'):
+                scn.render.use_persistent_data = bool(persistent_flag)
+        except Exception:
+            pass
+    if scn.render.engine == 'CYCLES':
+        try:
+            ops_cycles = getattr(bpy.ops, 'cycles', None)
+            if ops_cycles and hasattr(ops_cycles, 'cache_reset'):
+                # Reset cycles caches so each job starts clean when persistent data is enabled.
+                ops_cycles.cache_reset()
+        except Exception:
+            pass
     if job.camera_name:
         cam_obj = bpy.data.objects.get(job.camera_name)
         if cam_obj and cam_obj.type == 'CAMERA':

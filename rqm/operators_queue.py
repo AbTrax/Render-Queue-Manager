@@ -116,6 +116,10 @@ class RQM_OT_AddFromCurrent(Operator):
         job.res_x = scn.render.resolution_x
         job.res_y = scn.render.resolution_y
         job.percent = scn.render.resolution_percentage
+        if hasattr(scn.render, "use_persistent_data"):
+            job.use_persistent_data = bool(scn.render.use_persistent_data)
+        else:
+            job.use_persistent_data = False
         job.use_animation = False
         job.frame_start = scn.frame_start
         job.frame_end = scn.frame_end
@@ -191,6 +195,10 @@ class RQM_OT_AddCamerasInScene(Operator):
             job.res_x = scn.render.resolution_x
             job.res_y = scn.render.resolution_y
             job.percent = scn.render.resolution_percentage
+            if hasattr(scn.render, "use_persistent_data"):
+                job.use_persistent_data = bool(scn.render.use_persistent_data)
+            else:
+                job.use_persistent_data = False
             job.use_animation = False
             job.frame_start = scn.frame_start
             job.frame_end = scn.frame_end

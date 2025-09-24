@@ -87,6 +87,12 @@ class RQM_Job(PropertyGroup):
     res_y: IntProperty(name='Height', default=1080, min=4)
     percent: IntProperty(name='Scale %', default=100, min=1, max=100)
 
+    use_persistent_data: BoolProperty(
+        name='Persistent Data',
+        default=False,
+        description='Keep render data between frames (Cycles only). Saves reload time but uses more VRAM.',
+    )
+
     use_animation: BoolProperty(name='Render animation', default=False)
     frame_start: IntProperty(name='Start frame', default=1, min=0)
     frame_end: IntProperty(name='End frame', default=1, min=0)
