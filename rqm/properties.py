@@ -21,6 +21,7 @@ from .utils import (
     camera_items,
     engine_items,
     scene_items,
+    view_layer_identifier_map,
     view_layer_items,
 )
 
@@ -68,12 +69,69 @@ class RQM_CompOutput(PropertyGroup):
     override_node_format: BoolProperty(name='Node format = Render format', default=True)
 
 
+def _on_job_scene_change(self, context):
+    scene_name = getattr(self, 'scene_name', '')
+    scn = bpy.data.scenes.get(scene_name) if scene_name else None
+    if scn:
+        cam_name = getattr(self, 'camera_name', '') or ''
+        cam_obj = bpy.data.objects.get(cam_name) if cam_name else None
+        if not cam_obj or cam_obj.type != 'CAMERA' or cam_obj.name not in scn.objects:
+            default_cam = scn.camera
+            self.camera_name = default_cam.name if default_cam else ''
+        mapping = view_layer_identifier_map(scn)
+        if mapping:
+            raw_sel = getattr(self, 'view_layers', set())
+            if isinstance(raw_sel, str):
+                current = {raw_sel} if raw_sel else set()
+            else:
+                current = set(raw_sel)
+            preserved = [ident for ident in current if ident in mapping]
+            if preserved:
+                target_ids = preserved
+            else:
+                fallback = []
+                for ident, layer in mapping.items():
+                    try:
+                        if getattr(layer, 'use', True):
+                            fallback.append(ident)
+                    except Exception:
+                        fallback.append(ident)
+                target_ids = fallback
+            try:
+                self.view_layers = set(target_ids)
+            except Exception:
+                if target_ids:
+                    for ident in target_ids:
+                        try:
+                            self.view_layers = {ident}
+                        except Exception:
+                            continue
+                        else:
+                            break
+                else:
+                    try:
+                        self.view_layers = set()
+                    except Exception:
+                        pass
+        else:
+            try:
+                self.view_layers = set()
+            except Exception:
+                pass
+    else:
+        self.camera_name = ''
+        try:
+            self.view_layers = set()
+        except Exception:
+            pass
+
+
 class RQM_Job(PropertyGroup):
     enabled: BoolProperty(
         name='Enabled', default=True, description='Include this job when rendering the queue'
     )
     name: StringProperty(name='Job Name', default='')
-    scene_name: EnumProperty(name='Scene', items=scene_items)
+    scene_name: EnumProperty(name='Scene', items=scene_items, update=_on_job_scene_change)
     camera_name: EnumProperty(name='Camera', items=camera_items)
     view_layers: EnumProperty(
         name='View Layers',

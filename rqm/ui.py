@@ -236,7 +236,9 @@ class RQM_PT_Panel(Panel):
             controls.operator('rqm.start_queue', icon='RENDER_ANIMATION')
         else:
             controls.operator('rqm.stop_queue', icon='CANCEL')
-        if st.running and st.current_job_index >= 0:
-            layout.label(text=f'Running… Job {st.current_job_index + 1}/{len(st.queue)}')
+        if st.running and st.current_job_index >= 0 and len(st.queue) > 0:
+            total = len(st.queue)
+            display_idx = min(max(st.current_job_index, 0) + 1, total)
+            layout.label(text=f'Running. Job {display_idx}/{total}')
         else:
             layout.label(text='Idle')
