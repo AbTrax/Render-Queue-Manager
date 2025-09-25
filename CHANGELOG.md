@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.13.5] - 2025-09-26
+
+### Improved (Reload & Registration)
+
+- Hot-reload stability during development: safely reloads submodules without crashing on errors.
+- More robust class registration/unregistration to avoid duplicates when reloading the add-on.
+- Handler lifecycle tightened to prevent lingering handlers across enable/disable cycles.
+
+### Fixed (Unregister)
+
+- Safer pointer cleanup on unregister to avoid rare AttributeError cases.
+
 ## [1.13.0] - 2025-09-12
 
 ### Added
