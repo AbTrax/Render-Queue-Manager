@@ -10,7 +10,7 @@ from bpy.types import Operator  # type: ignore
 
 from .handlers import register_handlers
 from .jobs import apply_job
-from .properties import RQM_Job
+from .properties import RQM_Job, set_job_view_layer_names, sync_job_view_layers
 from .state import get_state
 from .utils import _sanitize_component, view_layer_identifier_map
 
@@ -34,47 +34,22 @@ def _enabled_view_layer_ids(mapping):
 
 
 
-def _prefill_job_view_layers(job, mapping, fallback_layer):
-    if not hasattr(job, 'view_layers') or not mapping:
+def _prefill_job_view_layers(job, scn, mapping, fallback_layer):
+    if not hasattr(job, 'view_layers'):
+        return
+    if not mapping:
+        set_job_view_layer_names(job, scn, [])
         return
     identifiers = _enabled_view_layer_ids(mapping)
     if identifiers:
-        _set_job_view_layers(job, mapping, identifiers)
+        names = [mapping[ident].name for ident in identifiers if ident in mapping]
+        set_job_view_layer_names(job, scn, names, mapping)
         return
     if not fallback_layer:
         return
     fallback_name = getattr(fallback_layer, 'name', None)
-    if not fallback_name:
-        return
-    identifier = next(
-        (ident for ident, layer in mapping.items() if getattr(layer, 'name', None) == fallback_name),
-        '',
-    )
-    if identifier:
-        _set_job_view_layers(job, mapping, [identifier])
-
-
-
-def _set_job_view_layers(job, mapping, identifiers):
-    if not hasattr(job, 'view_layers'):
-        return
-    if isinstance(identifiers, str):
-        identifiers = [identifiers] if identifiers else []
-    else:
-        identifiers = list(identifiers) if identifiers else []
-    valid = [ident for ident in identifiers if ident in mapping]
-    if not valid:
-        return
-    try:
-        job.view_layers = set(valid)
-    except Exception:
-        for ident in valid:
-            try:
-                job.view_layers = {ident}
-            except Exception:
-                continue
-            else:
-                break
+    if fallback_name:
+        set_job_view_layer_names(job, scn, [fallback_name], mapping)
 
 
 __all__ = [
@@ -112,7 +87,7 @@ class RQM_OT_AddFromCurrent(Operator):
                 fallback_layer = context.view_layer if context.view_layer else None
             except Exception:
                 fallback_layer = None
-            _prefill_job_view_layers(job, mapping, fallback_layer)
+            _prefill_job_view_layers(job, scn, mapping, fallback_layer)
         job.res_x = scn.render.resolution_x
         job.res_y = scn.render.resolution_y
         job.percent = scn.render.resolution_percentage
@@ -191,7 +166,7 @@ class RQM_OT_AddCamerasInScene(Operator):
                         active_layer = scn.view_layers[0]
                     except Exception:
                         active_layer = None
-                _prefill_job_view_layers(job, mapping, active_layer)
+                _prefill_job_view_layers(job, scn, mapping, active_layer)
             job.res_x = scn.render.resolution_x
             job.res_y = scn.render.resolution_y
             job.percent = scn.render.resolution_percentage
@@ -281,10 +256,12 @@ class RQM_OT_DuplicateJob(Operator):
             'scene_name',
             'camera_name',
             'view_layers',
+            'view_layer_selection',
             'engine',
             'res_x',
             'res_y',
             'percent',
+            'use_persistent_data',
             'use_animation',
             'frame_start',
             'frame_end',
@@ -327,6 +304,31 @@ class RQM_OT_DuplicateJob(Operator):
                 ]:
                     if hasattr(out, a):
                         setattr(new_out, a, getattr(out, a))
+                if hasattr(new_out, 'use_custom_encoding') and hasattr(out, 'use_custom_encoding'):
+                    new_out.use_custom_encoding = out.use_custom_encoding
+                if hasattr(new_out, 'encoding') and hasattr(out, 'encoding'):
+                    try:
+                        new_out.encoding.color_mode = out.encoding.color_mode
+                        new_out.encoding.color_depth = out.encoding.color_depth
+                        new_out.encoding.compression = out.encoding.compression
+                        new_out.encoding.quality = out.encoding.quality
+                        new_out.encoding.exr_codec = out.encoding.exr_codec
+                    except Exception:
+                        pass
+        # Sync encoding
+        if hasattr(dst, 'encoding') and hasattr(src, 'encoding'):
+            try:
+                dst.encoding.color_mode = src.encoding.color_mode
+                dst.encoding.color_depth = src.encoding.color_depth
+                dst.encoding.compression = src.encoding.compression
+                dst.encoding.quality = src.encoding.quality
+                dst.encoding.exr_codec = src.encoding.exr_codec
+            except Exception:
+                pass
+        # Ensure view layer storage aligns with new scene
+        target_scene = bpy.data.scenes.get(dst.scene_name) if dst.scene_name else None
+        if target_scene:
+            sync_job_view_layers(dst, target_scene)
         # Copy tag collection
         if hasattr(src, 'stereo_tags'):
             for t in src.stereo_tags:

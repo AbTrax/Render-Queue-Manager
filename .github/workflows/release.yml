@@ -1,4 +1,7 @@
-name: Build and Release
+name: Release
+
+permissions:
+  contents: write
 
 on:
   push:
@@ -6,94 +9,91 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
-      version:
-        description: "Version (X.Y.Z) when manually dispatching without a tag"
+      tag_name:
+        description: "Tag name to create or update (e.g. v1.2.0)"
+        required: true
+        type: string
+      release_name:
+        description: "Release title (defaults to Render Queue Manager <version>)"
         required: false
         type: string
-
-permissions:
-  contents: write
+      draft:
+        description: "Create the release as a draft"
+        required: false
+        default: false
+        type: boolean
+      prerelease:
+        description: "Mark the release as a prerelease"
+        required: false
+        default: false
+        type: boolean
+      target_commitish:
+        description: "Commit SHA or ref to tag when running manually"
+        required: false
+        default: main
+        type: string
 
 jobs:
-  build:
+  package:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Determine version
-        id: vars
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            ref="${GITHUB_REF##*/}"
-            ver="${ref#v}"
-            echo "Detected tag: $ref"
-            echo "tag=$ref" >> $GITHUB_OUTPUT
-            echo "version=$ver" >> $GITHUB_OUTPUT
-          else
-            manual_ver='${{ inputs.version }}'
-            if [[ -z "$manual_ver" ]]; then
-              ver=$(grep -E "version': \(" __init__.py | head -n1 | sed -E "s/.*version': \(([^)]*)\).*/\1/" | tr -d ' ' | cut -d',' -f1-3 | tr ',' '.')
-              echo "Parsed version from __init__.py: $ver"
-            else
-              ver="$manual_ver"
-              echo "Using provided version input: $ver"
-            fi
-            tag="v$ver"
-            echo "tag=$tag" >> $GITHUB_OUTPUT
-            echo "version=$ver" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Ensure tag exists (manual dispatch)
-        if: startsWith(github.ref, 'refs/tags/') == false
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@users.noreply.github.com"
-          git fetch --tags
-            
-          if git rev-parse "${{ steps.vars.outputs.tag }}" >/dev/null 2>&1; then
-            echo "Tag ${{ steps.vars.outputs.tag }} already exists locally.";
-          else
-            git tag -a "${{ steps.vars.outputs.tag }}" -m "Release ${{ steps.vars.outputs.version }}";
-          fi
-          git push origin "${{ steps.vars.outputs.tag }}" || echo "Tag push may have failed if tag already remote."
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          fetch-depth: 0
 
-      - name: Package addon
-        run: |
-          python scripts/package_addon.py --version ${{ steps.vars.outputs.version }}
-          ls -l dist || true
-          ls -l *.zip
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
 
-      - name: Generate release notes (diff from previous tag)
-        id: notes
-        run: |
-          CURRENT=${{ steps.vars.outputs.tag }}
-          PREV=$(git tag --sort=-creatordate | grep -v "$CURRENT" | head -n1 || true)
-          if [ -n "$PREV" ]; then
-            echo "Changes since $PREV" > notes.txt
-            git log --oneline "$PREV".."$CURRENT" >> notes.txt
-          else
-            echo "Initial release" > notes.txt
-          fi
-          echo "file=notes.txt" >> $GITHUB_OUTPUT
+      - name: Package add-on
+        run: python scripts/package_addon.py
 
-      - name: Upload artifact (zip)
+      - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
-          name: addon-zip
-          path: render-queue-manager-v${{ steps.vars.outputs.version }}.zip
+          name: render-queue-manager-package
+          path: render-queue-manager-v*.zip
 
-      - name: Create release
-        uses: softprops/action-gh-release@v2
+      - name: Determine release metadata
+        id: meta
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+            if [ -z "$TAG" ]; then
+              echo "Manual runs require the tag_name input" >&2
+              exit 1
+            fi
+            NAME="${{ github.event.inputs.release_name }}"
+            if [ -z "$NAME" ]; then
+              NAME="Render Queue Manager ${TAG#v}"
+            fi
+            TARGET="${{ github.event.inputs.target_commitish }}"
+            if [ -z "$TARGET" ]; then
+              TARGET="main"
+            fi
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            NAME="Render Queue Manager ${TAG#v}"
+            TARGET="${GITHUB_SHA}"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub release
+        uses: ncipollo/release-action@v1
         with:
-          name: Render Queue Manager ${{ steps.vars.outputs.version }}
-          tag_name: ${{ steps.vars.outputs.tag }}
-          body_path: notes.txt
-          files: render-queue-manager-v${{ steps.vars.outputs.version }}.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.name }}
+          artifacts: render-queue-manager-v*.zip
+          draft: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.draft || false }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease || false }}
+          allowUpdates: true
+          makeLatest: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit: ${{ steps.meta.outputs.target }}

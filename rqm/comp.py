@@ -4,7 +4,7 @@ import os
 import bpy  # type: ignore
 from .utils import (
     _sanitize_component, _sanitize_subpath, _tokens,
-    _ensure_dir, _scene_output_dir, _valid_node_format
+    _ensure_dir, _scene_output_dir, _valid_node_format, apply_encoding_settings
 )
 from .properties import RQM_CompOutput, RQM_Job
 
@@ -114,11 +114,23 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
         ok, e2 = _ensure_dir(base_dir)
         if not ok:
             return False, f"Couldn't create folder '{base_dir}': {e2}".strip()
-    if out.override_node_format and hasattr(node, 'format'):
-        try:
-            node.format.file_format = _valid_node_format(job.file_format or 'PNG')
-        except Exception:
-            pass
+    fmt = getattr(node, 'format', None)
+    if fmt:
+        if out.override_node_format:
+            try:
+                fmt.file_format = _valid_node_format(job.file_format or 'PNG')
+            except Exception:
+                pass
+        encoding_source = None
+        if getattr(out, 'use_custom_encoding', False):
+            encoding_source = getattr(out, 'encoding', None)
+        elif out.override_node_format:
+            encoding_source = getattr(job, 'encoding', None)
+        if encoding_source:
+            try:
+                apply_encoding_settings(fmt, fmt.file_format, encoding_source)
+            except Exception:
+                pass
     safe_job = _sanitize_component(job.name or 'job')
     safe_base = _sanitize_component(job.file_basename or 'render')
     # Avoid duplicate job name if basename already starts with it

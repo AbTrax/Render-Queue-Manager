@@ -1,7 +1,7 @@
 bl_info = {
     'name': 'Render Queue Manager',
     'author': 'Xnom3d',
-    'version': (1, 13, 5),
+    'version': (1, 14, 0),
     'blender': (3, 0, 0),
     'location': 'Properties > Output > Render Queue Manager',
     'description': 'Queue renders with per‑job folders & compositor outputs; modular package version.',
@@ -25,7 +25,7 @@ if any(m.startswith(_pkg_name + '.rqm') for m in list(sys.modules.keys())):
             except Exception:
                 pass
 
-from .rqm.properties import RQM_CompOutput, RQM_Job, RQM_State, RQM_Tag
+from .rqm.properties import RQM_CompOutput, RQM_EncodingSettings, RQM_Job, RQM_State, RQM_Tag
 from .rqm.operators_queue import (
     RQM_OT_AddFromCurrent, RQM_OT_AddCamerasInScene, RQM_OT_RemoveJob, RQM_OT_ClearQueue,
     RQM_OT_MoveJob, RQM_OT_StartQueue, RQM_OT_StopQueue,
@@ -42,7 +42,7 @@ import bpy  # type: ignore
 from bpy.props import PointerProperty  # type: ignore
 
 classes = (
-    RQM_Tag, RQM_CompOutput, RQM_Job, RQM_State,
+    RQM_Tag, RQM_EncodingSettings, RQM_CompOutput, RQM_Job, RQM_State,
     RQM_OT_AddFromCurrent, RQM_OT_AddCamerasInScene, RQM_OT_RemoveJob, RQM_OT_ClearQueue,
     RQM_OT_MoveJob, RQM_OT_StartQueue, RQM_OT_StopQueue,
     RQM_OT_DuplicateJob,

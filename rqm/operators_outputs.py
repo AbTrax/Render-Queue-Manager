@@ -25,6 +25,18 @@ class RQM_OT_Output_Add(Operator):
         out.extra_subfolder = ''
         out.ensure_dirs = True
         out.override_node_format = True
+        out.use_custom_encoding = False
+        job_enc = getattr(job, 'encoding', None)
+        out_enc = getattr(out, 'encoding', None)
+        if out_enc and job_enc:
+            try:
+                out_enc.color_mode = job_enc.color_mode
+                out_enc.color_depth = job_enc.color_depth
+                out_enc.compression = job_enc.compression
+                out_enc.quality = job_enc.quality
+                out_enc.exr_codec = job_enc.exr_codec
+            except Exception:
+                pass
         job.comp_outputs_index = len(job.comp_outputs)-1
         job.use_comp_outputs = True
         return {'FINISHED'}

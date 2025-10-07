@@ -2,9 +2,9 @@
 from __future__ import annotations
 import os
 import bpy  # type: ignore
-from .utils import _sanitize_component, _ensure_dir, view_layer_identifier_map
+from .utils import _sanitize_component, _ensure_dir, apply_encoding_settings, view_layer_identifier_map
 from .comp import base_render_dir, sync_one_output
-from .properties import RQM_Job
+from .properties import RQM_Job, get_job_view_layer_names, sync_job_view_layers
 
 __all__ = ['apply_job']
 
@@ -39,41 +39,33 @@ def apply_job(job: RQM_Job):
         cam_obj = bpy.data.objects.get(job.camera_name)
         if cam_obj and cam_obj.type == 'CAMERA':
             scn.camera = cam_obj
+    mapping = view_layer_identifier_map(scn)
     try:
-        selected_prop = getattr(job, 'view_layers', None)
-        if isinstance(selected_prop, str):
-            selected_ids = [selected_prop] if selected_prop else []
-        elif isinstance(selected_prop, (set, list, tuple)):
-            selected_ids = [s for s in selected_prop if s]
-        else:
-            selected_ids = []
-        if selected_ids:
-            mapping = view_layer_identifier_map(scn)
-            if mapping:
-                selected_lookup = set(selected_ids)
-                for ident, layer in mapping.items():
-                    should_enable = ident in selected_lookup
-                    try:
-                        layer.use = should_enable
-                    except Exception:
-                        pass
-                for ident in selected_ids:
-                    layer = mapping.get(ident)
-                    if not layer:
-                        continue
-                    try:
-                        bpy.context.window.view_layer = layer
-                    except Exception:
-                        try:
-                            bpy.context.view_layer = layer
-                        except Exception:
-                            pass
-                        else:
-                            break
-                    else:
-                        break
+        selected_names = sync_job_view_layers(job, scn, mapping)
     except Exception:
-        pass
+        selected_names = get_job_view_layer_names(job)
+    if selected_names and mapping:
+        selected_lookup = set(selected_names)
+        for layer in mapping.values():
+            try:
+                layer.use = layer.name in selected_lookup
+            except Exception:
+                pass
+        for name in selected_names:
+            layer = next((lay for lay in mapping.values() if getattr(lay, 'name', None) == name), None)
+            if not layer:
+                continue
+            try:
+                bpy.context.window.view_layer = layer
+            except Exception:
+                try:
+                    bpy.context.view_layer = layer
+                except Exception:
+                    pass
+                else:
+                    break
+            else:
+                break
     scn.render.resolution_x = job.res_x
     scn.render.resolution_y = job.res_y
     scn.render.resolution_percentage = job.percent
@@ -139,8 +131,17 @@ def apply_job(job: RQM_Job):
         scn.frame_start = 0
         scn.frame_end = 0
         scn.frame_current = 0
+    safe_job = _sanitize_component(job.name or 'job')
     safe_base = _sanitize_component(job.file_basename or 'render')
     scn.render.image_settings.file_format = job.file_format or 'PNG'
+    try:
+        apply_encoding_settings(
+            getattr(scn.render, 'image_settings', None),
+            job.file_format,
+            getattr(job, 'encoding', None),
+        )
+    except Exception:
+        pass
     # Ensure compositing enabled so File Output nodes run
     try:
         if hasattr(scn.render, 'use_compositing'):
@@ -156,9 +157,14 @@ def apply_job(job: RQM_Job):
     except Exception:
         pass
     # Ensure trailing separator then base name (Blender appends frame + view identifiers automatically)
-    # Add space after base so Blender writes 'basename 0000.ext'
-    base_with_space = safe_base + ' ' if not safe_base.endswith(' ') else safe_base
-    scn.render.filepath = os.path.join(bdir, '') + base_with_space
+    # Add job name prefix and a space so Blender writes 'Job_render 0000.ext'
+    if safe_job and not safe_base.lower().startswith(safe_job.lower() + '_'):
+        render_prefix = f'{safe_job}_{safe_base}'
+    else:
+        render_prefix = safe_base
+    if not render_prefix.endswith(' '):
+        render_prefix = render_prefix + ' '
+    scn.render.filepath = os.path.join(bdir, '') + render_prefix
     if job.use_comp_outputs and len(job.comp_outputs) > 0:
         errors = []
         for out in job.comp_outputs:

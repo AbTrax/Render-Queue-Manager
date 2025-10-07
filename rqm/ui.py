@@ -10,6 +10,20 @@ from .state import get_state
 __all__ = ['RQM_UL_Queue', 'RQM_UL_Outputs', 'RQM_UL_Tags', 'RQM_PT_Panel']
 
 
+def _draw_encoding_controls(layout, encoding, file_format):
+    if not encoding:
+        return
+    fmt = (file_format or '').upper()
+    layout.prop(encoding, 'color_mode')
+    layout.prop(encoding, 'color_depth')
+    if fmt in {'PNG', 'TIFF', 'OPEN_EXR', 'OPEN_EXR_MULTILAYER'}:
+        layout.prop(encoding, 'compression')
+    if fmt == 'JPEG':
+        layout.prop(encoding, 'quality')
+    if fmt in {'OPEN_EXR', 'OPEN_EXR_MULTILAYER'}:
+        layout.prop(encoding, 'exr_codec')
+
+
 class RQM_UL_Queue(UIList):
     bl_idname = 'RQM_UL_Queue'
 
@@ -166,6 +180,9 @@ class RQM_PT_Panel(Panel):
             col.prop(job, 'file_format')
             col.prop(job, 'output_path')
             col.prop(job, 'file_basename')
+            enc_box = col.box()
+            enc_box.label(text='Encoding', icon='COLOR')
+            _draw_encoding_controls(enc_box, getattr(job, 'encoding', None), job.file_format)
             if hasattr(job, 'suffix_output_folders_with_job'):
                 col.prop(job, 'suffix_output_folders_with_job')
             if job.use_animation and hasattr(job, 'rebase_numbering'):
@@ -221,6 +238,19 @@ class RQM_PT_Panel(Panel):
                         sub.prop(out, 'node_name', text='File Output Node')
                     sub.prop(out, 'create_if_missing')
                     sub.prop(out, 'override_node_format')
+                    sub.prop(out, 'use_custom_encoding')
+                    enc_info = sub.box()
+                    if out.use_custom_encoding:
+                        enc_info.label(text='Encoding', icon='COLOR')
+                        _draw_encoding_controls(
+                            enc_info,
+                            getattr(out, 'encoding', None),
+                            job.file_format if out.override_node_format else job.file_format,
+                        )
+                    elif out.override_node_format:
+                        enc_info.label(text='Follows job encoding', icon='INFO')
+                    else:
+                        enc_info.label(text='Uses node encoding', icon='INFO')
                     sub.separator()
                     sub.label(text='Save location', icon='FILE_FOLDER')
                     sub.prop(out, 'base_source', text='Base')

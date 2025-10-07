@@ -18,6 +18,7 @@ __all__ = [
     '_ensure_dir',
     '_scene_output_dir',
     '_valid_node_format',
+    'apply_encoding_settings',
 ]
 
 FILE_FORMAT_ITEMS = [
@@ -142,3 +143,46 @@ def _scene_output_dir(scn):
     if p.endswith(('/', '\\')) or os.path.isdir(p):
         return p
     return os.path.dirname(p) or '//'
+
+
+def apply_encoding_settings(image_settings, file_format, encoding):
+    """Apply encoding settings to a Blender ImageFormatSettings-like object."""
+    if not image_settings or encoding is None:
+        return
+    fmt = (file_format or getattr(image_settings, 'file_format', '') or '').upper()
+    # Color mode (RGB / RGBA / BW)
+    mode = getattr(encoding, 'color_mode', None)
+    if mode:
+        try:
+            image_settings.color_mode = mode
+        except Exception:
+            pass
+    # Color depth (8 / 16 / 32)
+    depth = getattr(encoding, 'color_depth', None)
+    if depth:
+        try:
+            image_settings.color_depth = depth
+        except Exception:
+            pass
+    # Compression (PNG/TIFF/EXR)
+    compression = getattr(encoding, 'compression', None)
+    if compression is not None and fmt in {'PNG', 'TIFF', 'OPEN_EXR', 'OPEN_EXR_MULTILAYER'}:
+        try:
+            image_settings.compression = max(0, min(100, int(compression)))
+        except Exception:
+            pass
+    # Quality (JPEG)
+    quality = getattr(encoding, 'quality', None)
+    if quality is not None and fmt in {'JPEG'}:
+        try:
+            image_settings.quality = max(0, min(100, int(quality)))
+        except Exception:
+            pass
+    # EXR codec
+    if fmt in {'OPEN_EXR', 'OPEN_EXR_MULTILAYER'}:
+        codec = getattr(encoding, 'exr_codec', None)
+        if codec:
+            try:
+                image_settings.exr_codec = codec
+            except Exception:
+                pass

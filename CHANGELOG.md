@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.14.0] - 2025-10-03
+
+### Added
+
+- Per-job and per-output encoding controls (color depth, compression, EXR codec, JPEG quality) with UI configuration.
+
+### Changed
+
+- Main render output now prefixes filenames with the job name so files in subfolders and multiview variants are job-scoped by default.
+
+### Fixed
+
+- View layer selections stay in sync per job when scenes change or layers are renamed.
+
 ## [1.13.5] - 2025-09-26
 
 ### Improved (Reload & Registration)
