@@ -305,6 +305,19 @@ class RQM_Job(PropertyGroup):
     res_y: IntProperty(name='Height', default=1080, min=4)
     percent: IntProperty(name='Scale %', default=100, min=1, max=100)
 
+    use_frame_border: BoolProperty(
+        name='Use Frame Border',
+        default=False,
+        description='Render with a uniform pixel border while keeping the camera framing unchanged',
+    )
+    frame_border_pixels: IntProperty(
+        name='Border (pixels)',
+        default=50,
+        min=0,
+        max=4096,
+        description='Border size in pixels applied on every side of the rendered frame',
+    )
+
     use_persistent_data: BoolProperty(
         name='Persistent Data',
         default=False,

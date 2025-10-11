@@ -8,6 +8,43 @@ from .properties import RQM_Job, get_job_view_layer_names, sync_job_view_layers
 
 __all__ = ['apply_job']
 
+def _apply_frame_border(scn, job):
+    render = getattr(scn, 'render', None)
+    if not render:
+        return
+    border_enabled = bool(getattr(job, 'use_frame_border', False))
+    border_px = int(getattr(job, 'frame_border_pixels', 0) or 0)
+    if not border_enabled or border_px <= 0:
+        try:
+            render.use_border = False
+            render.use_crop_to_border = False
+            render.border_min_x = 0.0
+            render.border_min_y = 0.0
+            render.border_max_x = 1.0
+            render.border_max_y = 1.0
+        except Exception:
+            pass
+        return
+    res_x = max(int(getattr(job, 'res_x', render.resolution_x) or render.resolution_x), 1)
+    res_y = max(int(getattr(job, 'res_y', render.resolution_y) or render.resolution_y), 1)
+    max_border_x = (res_x - 2) // 2
+    max_border_y = (res_y - 2) // 2
+    if max_border_x < 0 or max_border_y < 0:
+        return
+    px_x = min(border_px, max_border_x)
+    px_y = min(border_px, max_border_y)
+    norm_x = max(min(px_x / res_x, 0.499), 0.0)
+    norm_y = max(min(px_y / res_y, 0.499), 0.0)
+    try:
+        render.use_border = True
+        render.use_crop_to_border = False
+        render.border_min_x = norm_x
+        render.border_max_x = 1.0 - norm_x
+        render.border_min_y = norm_y
+        render.border_max_y = 1.0 - norm_y
+    except Exception:
+        pass
+
 def apply_job(job: RQM_Job):
     scn = bpy.data.scenes.get(job.scene_name)
     if not scn:
@@ -69,6 +106,7 @@ def apply_job(job: RQM_Job):
     scn.render.resolution_x = job.res_x
     scn.render.resolution_y = job.res_y
     scn.render.resolution_percentage = job.percent
+    _apply_frame_border(scn, job)
     # Stereoscopy (multiview) handling
     try:
         if getattr(job, 'use_stereoscopy', False):

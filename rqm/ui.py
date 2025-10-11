@@ -146,6 +146,10 @@ class RQM_PT_Panel(Panel):
             rr.prop(job, 'res_x')
             rr.prop(job, 'res_y')
             rr.prop(job, 'percent')
+            col.prop(job, 'use_frame_border', text='Add Pixel Border')
+            border_row = col.row(align=True)
+            border_row.enabled = job.use_frame_border
+            border_row.prop(job, 'frame_border_pixels', text='Border Size')
 
             col.separator()
             col.prop(job, 'use_animation')

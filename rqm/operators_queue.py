@@ -52,6 +52,41 @@ def _prefill_job_view_layers(job, scn, mapping, fallback_layer):
         set_job_view_layer_names(job, scn, [fallback_name], mapping)
 
 
+def _prefill_frame_border(job, render):
+    if not hasattr(job, 'use_frame_border') or not render:
+        return
+    try:
+        use_border = bool(render.use_border)
+        use_crop = bool(getattr(render, 'use_crop_to_border', False))
+    except Exception:
+        job.use_frame_border = False
+        return
+    job.use_frame_border = use_border and not use_crop
+    if not job.use_frame_border:
+        return
+    try:
+        res_x = max(int(render.resolution_x), 1)
+        res_y = max(int(render.resolution_y), 1)
+    except Exception:
+        res_x = 1
+        res_y = 1
+    try:
+        candidates = [
+            render.border_min_x * res_x,
+            (1.0 - render.border_max_x) * res_x,
+            render.border_min_y * res_y,
+            (1.0 - render.border_max_y) * res_y,
+        ]
+    except Exception:
+        candidates = []
+    candidates = [c for c in candidates if c is not None]
+    if not candidates:
+        return
+    pixels = max(int(round(min(candidates))), 0)
+    if pixels > 0:
+        job.frame_border_pixels = pixels
+
+
 __all__ = [
     'RQM_OT_AddFromCurrent',
     'RQM_OT_AddCamerasInScene',
@@ -91,6 +126,7 @@ class RQM_OT_AddFromCurrent(Operator):
         job.res_x = scn.render.resolution_x
         job.res_y = scn.render.resolution_y
         job.percent = scn.render.resolution_percentage
+        _prefill_frame_border(job, getattr(scn, 'render', None))
         if hasattr(scn.render, "use_persistent_data"):
             job.use_persistent_data = bool(scn.render.use_persistent_data)
         else:
@@ -170,6 +206,7 @@ class RQM_OT_AddCamerasInScene(Operator):
             job.res_x = scn.render.resolution_x
             job.res_y = scn.render.resolution_y
             job.percent = scn.render.resolution_percentage
+            _prefill_frame_border(job, getattr(scn, 'render', None))
             if hasattr(scn.render, "use_persistent_data"):
                 job.use_persistent_data = bool(scn.render.use_persistent_data)
             else:

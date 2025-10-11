@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Optional per-job frame border that renders a uniform pixel margin without altering camera framing.
+
 ## [1.14.1] - 2025-10-11
 
 ### Changed
