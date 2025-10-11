@@ -10,29 +10,86 @@ from .properties import RQM_CompOutput, RQM_Job
 
 __all__ = [
     'job_root_dir','base_render_dir','comp_root_dir',
-    'get_file_output_node','resolve_base_dir','sync_one_output'
+    'get_file_output_node','resolve_base_dir','sync_one_output',
+    'job_file_prefix'
 ]
 
 
-def _append_job_suffix(folder: str, job: RQM_Job) -> str:
-    if not getattr(job, 'suffix_output_folders_with_job', False):
-        return folder
-    safe_job = _sanitize_component(job.name or 'job')
-    if not safe_job:
-        return folder
-    stripped = folder.rstrip('/\\')
+def _append_job_suffix(folder: str, job: RQM_Job, token: str | None = None) -> str:
+    """
+    Ensure the final folder component follows the job-prefixed convention when enabled.
+    token: optional raw tail name to prefer over the existing folder basename.
+    """
+    stripped = (folder or '').rstrip('/\\')
     if not stripped:
         return folder
-    tail = os.path.basename(stripped)
-    if not tail:
-        return folder
-    if tail.lower() == safe_job.lower() or tail.lower().endswith('_' + safe_job.lower()):
-        return folder
     parent = os.path.dirname(stripped)
-    new_tail = f'{tail}_{safe_job}'
+    existing_tail = os.path.basename(stripped)
+    safe_tail = _sanitize_component(token or existing_tail)
+    safe_job = _sanitize_component(job.name or 'job')
+    if not safe_tail:
+        safe_tail = existing_tail or 'output'
+    if getattr(job, 'suffix_output_folders_with_job', False):
+        # New convention: prefix tail with job name unless already present
+        job_lower = safe_job.lower()
+        tail_lower = safe_tail.lower()
+        if not tail_lower.startswith(job_lower):
+            safe_tail = f'{safe_job}_{safe_tail}'
     if parent:
-        return os.path.join(parent, new_tail)
-    return new_tail
+        return os.path.join(parent, safe_tail)
+    return safe_tail
+
+
+def _remove_job_prefix(token: str, safe_job: str) -> str:
+    """Strip the job name prefix from a token if present (case-insensitive)."""
+    token = (token or '').strip('_ -')
+    if not token:
+        return ''
+    lower = token.lower()
+    job_lower = safe_job.lower()
+    if lower == job_lower:
+        return ''
+    if lower.startswith(job_lower):
+        remainder = token[len(safe_job):].lstrip('_- ')
+        return remainder.strip('_ -')
+    return token
+
+
+def _derive_subfolder_token(job: RQM_Job, base_dir: str, *fallback_tokens: str) -> str:
+    """Determine the subfolder component (without job prefix) used for filenames."""
+    safe_job = _sanitize_component(job.name or 'job')
+    candidates = []
+    stripped = (base_dir or '').rstrip('/\\')
+    if stripped:
+        leaf = _sanitize_component(os.path.basename(stripped))
+        if leaf:
+            candidates.append(_remove_job_prefix(leaf, safe_job))
+    for token in fallback_tokens:
+        if token:
+            safe_token = _sanitize_component(token)
+            candidates.append(_remove_job_prefix(safe_token, safe_job))
+    file_base = _sanitize_component(getattr(job, 'file_basename', '') or '')
+    if file_base:
+        candidates.append(_remove_job_prefix(file_base, safe_job))
+    for candidate in candidates:
+        clean = (candidate or '').strip('_ -')
+        if clean:
+            return clean
+    return 'output'
+
+
+def job_file_prefix(job: RQM_Job, base_dir: str, *fallback_tokens: str) -> str:
+    """Build the filename prefix `<job>_<subfolder> ` for render and compositor outputs."""
+    safe_job = _sanitize_component(job.name or 'job')
+    sub_token = _derive_subfolder_token(job, base_dir, *fallback_tokens)
+    safe_sub = _sanitize_component(sub_token or '')
+    if not safe_sub or safe_sub.lower() == safe_job.lower():
+        prefix = safe_job
+    else:
+        prefix = f'{safe_job}_{safe_sub}'
+    if not prefix.endswith(' '):
+        prefix = prefix + ' '
+    return prefix
 
 def job_root_dir(job: RQM_Job) -> str:
     root = bpy.path.abspath(job.output_path)
@@ -40,7 +97,7 @@ def job_root_dir(job: RQM_Job) -> str:
 
 def base_render_dir(job: RQM_Job) -> str:
     base = os.path.join(job_root_dir(job), 'base')
-    return _append_job_suffix(base, job)
+    return _append_job_suffix(base, job, 'base')
 
 def comp_root_dir(job: RQM_Job) -> str:
     # Flatten structure: compositor outputs share job root (no separate 'comp' folder)
@@ -82,16 +139,22 @@ def resolve_base_dir(scn, job: RQM_Job, out: RQM_CompOutput, node_name: str):
         if not out.base_file:
             return None, "You chose 'Folder of a chosen file' but no file was picked."
         base_dir = os.path.dirname(bpy.path.abspath(out.base_file))
-    base_dir = _append_job_suffix(base_dir, job)
-
+    leaf_hint = None
+    node_hint = None
     if out.use_node_named_subfolder:
         node_sub = _sanitize_component(node_name or 'Composite')
         base_dir = os.path.join(base_dir, node_sub)
+        node_hint = node_sub
+        leaf_hint = node_sub
     if out.extra_subfolder.strip():
         raw = _tokens(out.extra_subfolder, scn, job.name, job.camera_name, node_name=node_name).strip()
         sub = _sanitize_subpath(raw)
         if sub:
             base_dir = os.path.join(base_dir, sub)
+            leaf_hint = os.path.basename(sub.rstrip('/\\'))
+    if out.base_source == 'JOB_OUTPUT':
+        token = leaf_hint or node_hint or 'comp'
+        base_dir = _append_job_suffix(base_dir, job, token)
     return base_dir, None
 
 def _ensure_min_slot(node, fallback_name: str):
@@ -131,16 +194,14 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
                 apply_encoding_settings(fmt, fmt.file_format, encoding_source)
             except Exception:
                 pass
-    safe_job = _sanitize_component(job.name or 'job')
-    safe_base = _sanitize_component(job.file_basename or 'render')
-    # Avoid duplicate job name if basename already starts with it
-    if safe_base.lower().startswith(safe_job.lower() + '_'):
-        target_prefix = safe_base
-    else:
-        target_prefix = f'{safe_job}_{safe_base}'
-    # Ensure a space at end so frames become '<prefix> 0000'
-    if not target_prefix.endswith(' '):
-        target_prefix = target_prefix + ' '
+    extra_hint = ''
+    if out.extra_subfolder.strip():
+        raw = _tokens(out.extra_subfolder, scn, job.name, job.camera_name, node_name=node.name).strip()
+        sub = _sanitize_subpath(raw)
+        if sub:
+            extra_hint = os.path.basename(sub.rstrip('/\\'))
+    node_hint = node.name if out.use_node_named_subfolder else ''
+    target_prefix = job_file_prefix(job, base_dir, extra_hint, node_hint, 'comp')
     _ensure_min_slot(node, target_prefix)
     # Only override default/empty slot names ('', 'image', 'render') to avoid clobbering user custom slot paths
     try:

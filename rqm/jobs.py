@@ -2,8 +2,8 @@
 from __future__ import annotations
 import os
 import bpy  # type: ignore
-from .utils import _sanitize_component, _ensure_dir, apply_encoding_settings, view_layer_identifier_map
-from .comp import base_render_dir, sync_one_output
+from .utils import _ensure_dir, apply_encoding_settings, view_layer_identifier_map
+from .comp import base_render_dir, sync_one_output, job_file_prefix
 from .properties import RQM_Job, get_job_view_layer_names, sync_job_view_layers
 
 __all__ = ['apply_job']
@@ -131,8 +131,6 @@ def apply_job(job: RQM_Job):
         scn.frame_start = 0
         scn.frame_end = 0
         scn.frame_current = 0
-    safe_job = _sanitize_component(job.name or 'job')
-    safe_base = _sanitize_component(job.file_basename or 'render')
     scn.render.image_settings.file_format = job.file_format or 'PNG'
     try:
         apply_encoding_settings(
@@ -156,14 +154,8 @@ def apply_job(job: RQM_Job):
         _ensure_dir(comp_root_dir(job))
     except Exception:
         pass
-    # Ensure trailing separator then base name (Blender appends frame + view identifiers automatically)
-    # Add job name prefix and a space so Blender writes 'Job_render 0000.ext'
-    if safe_job and not safe_base.lower().startswith(safe_job.lower() + '_'):
-        render_prefix = f'{safe_job}_{safe_base}'
-    else:
-        render_prefix = safe_base
-    if not render_prefix.endswith(' '):
-        render_prefix = render_prefix + ' '
+    # Ensure trailing separator then job/subfolder prefix so Blender writes '<Job>_<Sub> 0000.ext'
+    render_prefix = job_file_prefix(job, bdir, 'base')
     scn.render.filepath = os.path.join(bdir, '') + render_prefix
     if job.use_comp_outputs and len(job.comp_outputs) > 0:
         errors = []

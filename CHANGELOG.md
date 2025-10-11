@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.14.1] - 2025-10-11
+
+### Changed
+
+- Generated render and compositor outputs now use the `[job]_[subfolder]` convention for both folders and filenames (frame numbers remain suffixes).
+- The folder option now prefixes job names (e.g. `Job_base`) instead of suffixing them.
+
 ## [1.14.0] - 2025-10-03
 
 ### Added

@@ -11,7 +11,7 @@
 ## ✨ Features
 
 - Per-job overrides: scene, camera, view layers, engine, resolution, animation range (remapped to start at frame 0 for consistent filenames).
-- Deterministic directory layout (with optional job-name suffixes for generated folders):
+- Deterministic directory layout (with optional job-name prefixes for generated folders):
   - Base renders: `<root>/<job_name>/base/<basename><frame>.ext`
   - Compositor outputs: `<root>/<job_name>/<NodeName>/...` (no separate `comp/` folder)
 - Multiple Compositor File Output nodes per job (we only manage base path + optional format + default slot naming).

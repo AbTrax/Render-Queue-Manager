@@ -352,9 +352,9 @@ class RQM_Job(PropertyGroup):
         description="Prefix for main render files (sanitised). Example: 'beauty' -> beauty0001.png",
     )
     suffix_output_folders_with_job: BoolProperty(
-        name='Suffix folders with job name',
+        name='Prefix folders with job name',
         default=False,
-        description='Append the job name to generated render and compositor folders',
+        description='Name generated folders like Job_base or Job_comp instead of appending the job name',
     )
     rebase_numbering: BoolProperty(
         name='Number files from 0',
