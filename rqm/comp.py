@@ -55,38 +55,71 @@ def _remove_job_prefix(token: str, safe_job: str) -> str:
     return token
 
 
-def _derive_subfolder_token(job: RQM_Job, base_dir: str, *fallback_tokens: str) -> str:
-    """Determine the subfolder component (without job prefix) used for filenames."""
+def _derive_subfolder_tokens(job: RQM_Job, base_dir: str, *fallback_tokens: str) -> list[str]:
+    """Determine the ordered subfolder components (without job prefix) used for filenames."""
     safe_job = _sanitize_component(job.name or 'job')
-    candidates = []
-    stripped = (base_dir or '').rstrip('/\\')
-    if stripped:
-        leaf = _sanitize_component(os.path.basename(stripped))
-        if leaf:
-            candidates.append(_remove_job_prefix(leaf, safe_job))
+    tokens: list[str] = []
+    seen_lower: set[str] = set()
+
+    def _add_token(raw: str):
+        if not raw:
+            return
+        safe = _sanitize_component(raw)
+        safe = _remove_job_prefix(safe, safe_job)
+        safe = safe.strip('_ -')
+        if not safe:
+            return
+        lowered = safe.lower()
+        if lowered in seen_lower:
+            return
+        tokens.append(safe)
+        seen_lower.add(lowered)
+
+    base_clean = (base_dir or '').rstrip('/\\')
+    if base_clean:
+        try:
+            job_root = os.path.normpath(job_root_dir(job))
+            rel = os.path.relpath(os.path.normpath(base_clean), job_root)
+        except Exception:
+            rel = None
+        if rel and rel not in ('.', os.curdir) and not rel.startswith('..'):
+            for part in rel.split(os.sep):
+                if part and part not in ('.', os.curdir):
+                    _add_token(part)
+        else:
+            # Fallback: at least consider the leaf
+            leaf = os.path.basename(base_clean)
+            if leaf:
+                _add_token(leaf)
+
     for token in fallback_tokens:
-        if token:
-            safe_token = _sanitize_component(token)
-            candidates.append(_remove_job_prefix(safe_token, safe_job))
-    file_base = _sanitize_component(getattr(job, 'file_basename', '') or '')
-    if file_base:
-        candidates.append(_remove_job_prefix(file_base, safe_job))
-    for candidate in candidates:
-        clean = (candidate or '').strip('_ -')
-        if clean:
-            return clean
-    return 'output'
+        if not token:
+            continue
+        norm = os.path.normpath(token)
+        parts = norm.split(os.sep)
+        for part in parts:
+            if part and part not in ('.', os.curdir):
+                _add_token(part)
+
+    if not tokens:
+        file_base = _sanitize_component(getattr(job, 'file_basename', '') or '')
+        if file_base:
+            _add_token(file_base)
+
+    if tokens:
+        return tokens
+    return ['output']
 
 
 def job_file_prefix(job: RQM_Job, base_dir: str, *fallback_tokens: str) -> str:
-    """Build the filename prefix `<job>_<subfolder> ` for render and compositor outputs."""
+    """Build the filename prefix `<job>_<subfolders> ` for render and compositor outputs."""
     safe_job = _sanitize_component(job.name or 'job')
-    sub_token = _derive_subfolder_token(job, base_dir, *fallback_tokens)
-    safe_sub = _sanitize_component(sub_token or '')
-    if not safe_sub or safe_sub.lower() == safe_job.lower():
+    sub_tokens = _derive_subfolder_tokens(job, base_dir, *fallback_tokens)
+    safe_tail = '_'.join(_sanitize_component(tok).replace(' ', '_') for tok in sub_tokens if tok)
+    if not safe_tail or safe_tail.lower() == safe_job.lower():
         prefix = safe_job
     else:
-        prefix = f'{safe_job}_{safe_sub}'
+        prefix = f'{safe_job}_{safe_tail}'
     if not prefix.endswith(' '):
         prefix = prefix + ' '
     return prefix
@@ -201,7 +234,10 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
         if sub:
             extra_hint = os.path.basename(sub.rstrip('/\\'))
     node_hint = node.name if out.use_node_named_subfolder else ''
-    target_prefix = job_file_prefix(job, base_dir, extra_hint, node_hint, 'comp')
+    fallback_tokens = [tok for tok in (extra_hint, node_hint) if tok]
+    if not fallback_tokens:
+        fallback_tokens.append('comp')
+    target_prefix = job_file_prefix(job, base_dir, *fallback_tokens)
     _ensure_min_slot(node, target_prefix)
     # Only override default/empty slot names ('', 'image', 'render') to avoid clobbering user custom slot paths
     try:
