@@ -62,6 +62,8 @@ def _prefill_frame_border(job, render):
         job.use_frame_border = False
         return
     job.use_frame_border = use_border and not use_crop
+    if hasattr(job, 'frame_border_mode'):
+        job.frame_border_mode = 'INNER'
     if not job.use_frame_border:
         return
     try:

@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- Optional per-job frame border that renders a uniform pixel margin without altering camera framing.
+- Per-job frame border with selectable inner/outer mode so you can either matte inside the shot or expand the canvas while leaving the camera framing intact.
 
 ## [1.14.1] - 2025-10-11
 

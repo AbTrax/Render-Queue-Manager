@@ -310,6 +310,14 @@ class RQM_Job(PropertyGroup):
         default=False,
         description='Render with a uniform pixel border while keeping the camera framing unchanged',
     )
+    frame_border_mode: EnumProperty(
+        name='Border Mode',
+        items=[
+            ('INNER', 'Inner', 'Subtract pixels from the frame to create a matte inside the existing resolution'),
+            ('OUTER', 'Outer', 'Add pixels outside the frame to keep the camera view untouched and grow the canvas'),
+        ],
+        default='INNER',
+    )
     frame_border_pixels: IntProperty(
         name='Border (pixels)',
         default=50,

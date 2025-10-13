@@ -146,10 +146,13 @@ class RQM_PT_Panel(Panel):
             rr.prop(job, 'res_x')
             rr.prop(job, 'res_y')
             rr.prop(job, 'percent')
-            col.prop(job, 'use_frame_border', text='Add Pixel Border')
-            border_row = col.row(align=True)
-            border_row.enabled = job.use_frame_border
-            border_row.prop(job, 'frame_border_pixels', text='Border Size')
+            col.prop(job, 'use_frame_border', text='Use Pixel Border')
+            border_col = col.column(align=True)
+            border_col.enabled = job.use_frame_border
+            if hasattr(job, 'frame_border_mode'):
+                mode_row = border_col.row(align=True)
+                mode_row.prop(job, 'frame_border_mode', text='Mode', expand=True)
+            border_col.prop(job, 'frame_border_pixels', text='Size (px)')
 
             col.separator()
             col.prop(job, 'use_animation')

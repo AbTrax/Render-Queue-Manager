@@ -14,6 +14,8 @@ def _apply_frame_border(scn, job):
         return
     border_enabled = bool(getattr(job, 'use_frame_border', False))
     border_px = int(getattr(job, 'frame_border_pixels', 0) or 0)
+    base_x = max(int(getattr(job, 'res_x', getattr(render, 'resolution_x', 1)) or 1), 1)
+    base_y = max(int(getattr(job, 'res_y', getattr(render, 'resolution_y', 1)) or 1), 1)
     if not border_enabled or border_px <= 0:
         try:
             render.use_border = False
@@ -24,17 +26,51 @@ def _apply_frame_border(scn, job):
             render.border_max_y = 1.0
         except Exception:
             pass
+        try:
+            render.resolution_x = base_x
+            render.resolution_y = base_y
+        except Exception:
+            pass
         return
-    res_x = max(int(getattr(job, 'res_x', render.resolution_x) or render.resolution_x), 1)
-    res_y = max(int(getattr(job, 'res_y', render.resolution_y) or render.resolution_y), 1)
-    max_border_x = (res_x - 2) // 2
-    max_border_y = (res_y - 2) // 2
-    if max_border_x < 0 or max_border_y < 0:
-        return
-    px_x = min(border_px, max_border_x)
-    px_y = min(border_px, max_border_y)
-    norm_x = max(min(px_x / res_x, 0.499), 0.0)
-    norm_y = max(min(px_y / res_y, 0.499), 0.0)
+    mode = getattr(job, 'frame_border_mode', 'INNER') or 'INNER'
+    if mode != 'OUTER':
+        max_border_x = max((base_x - 2) // 2, 0)
+        max_border_y = max((base_y - 2) // 2, 0)
+        if max_border_x <= 0 or max_border_y <= 0:
+            try:
+                render.use_border = False
+                render.use_crop_to_border = False
+                render.border_min_x = 0.0
+                render.border_min_y = 0.0
+                render.border_max_x = 1.0
+                render.border_max_y = 1.0
+            except Exception:
+                pass
+            try:
+                render.resolution_x = base_x
+                render.resolution_y = base_y
+            except Exception:
+                pass
+            return
+        px_x = min(border_px, max_border_x)
+        px_y = min(border_px, max_border_y)
+        norm_x = max(min(px_x / float(base_x), 0.499), 0.0)
+        norm_y = max(min(px_y / float(base_y), 0.499), 0.0)
+        try:
+            render.resolution_x = base_x
+            render.resolution_y = base_y
+        except Exception:
+            pass
+    else:
+        outer_x = max(base_x + border_px * 2, 2)
+        outer_y = max(base_y + border_px * 2, 2)
+        try:
+            render.resolution_x = outer_x
+            render.resolution_y = outer_y
+        except Exception:
+            pass
+        norm_x = max(min(border_px / float(outer_x), 0.499), 0.0)
+        norm_y = max(min(border_px / float(outer_y), 0.499), 0.0)
     try:
         render.use_border = True
         render.use_crop_to_border = False
