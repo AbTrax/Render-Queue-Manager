@@ -1,0 +1,16 @@
+schema_version = "1.0.0"
+
+id = "render_queue_manager_x"
+version = "1.14.2"
+type = "add-on"
+
+name = "Render Queue Manager X"
+tagline = "Queue renders with per-job folders and compositor outputs."
+maintainer = "Xnom3d"
+support = "COMMUNITY"
+
+tags = ["Render"]
+license = ["SPDX:GPL-3.0-or-later"]
+blender_version_min = "4.2.0"
+
+permissions = ["filesystem"]

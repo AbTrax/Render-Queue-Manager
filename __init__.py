@@ -1,12 +1,6 @@
-bl_info = {
-    'name': 'Render Queue Manager X',
-    'author': 'Xnom3d',
-    'version': (1, 14, 2),
-    'blender': (3, 0, 0),
-    'location': 'Properties > Output > Render Queue Manager X',
-    'description': 'Queue renders with per-job folders & compositor outputs; modular package version.',
-    'category': 'Render',
-}
+"""Render Queue Manager X - Blender extension entry point."""
+
+__version__ = "1.14.2"
 
 # --- Hot reload support ---
 import importlib, sys

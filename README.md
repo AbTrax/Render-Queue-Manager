@@ -1,6 +1,6 @@
 # Render Queue Manager X — Reliable Multi-Job Rendering for Blender
 
-**Version:** 1.14.2 · **Blender Compatibility:** 3.0+
+**Version:** 1.14.2 - **Blender Compatibility:** 4.2+ (Extensions build; use the legacy add-on zip for Blender 3.x)
 
 Render Queue Manager X is a modular toolkit for orchestrating Blender renders authored by **Xnom3d**. Queue per-scene jobs, keep compositor outputs tidy, and ship consistent folders for every shot without babysitting renders. Install once and drive the workflow from the **Properties ▸ Output** tab under **Render Queue Manager X**.
 
@@ -33,19 +33,23 @@ Render Queue Manager X is a modular toolkit for orchestrating Blender renders au
 
 ## Installation
 
-### From a Release Zip
+### Blender 4.2+ (Extensions)
 
-1. Download the latest `.zip` from the Releases page (or package this repository as a zip).
-2. In Blender, open **Edit ▸ Preferences ▸ Add-ons**.
-3. Click **Install**, choose the zip, enable **Render Queue Manager X**.
+1. Download the latest `.zip` built with the extension packaging script (see Automated Releases).
+2. In Blender, open **Edit > Preferences > Get Extensions**.
+3. Click **Install from Disk**, choose the zip, then enable **Render Queue Manager X**.
+4. Blender keeps the extension listed under the Extensions panel for future updates.
 
-### From Source (Developer Setup)
+### Manual Source Checkout
 
-1. Clone the repository into your Blender add-ons folder:
-   - Windows: `%APPDATA%/Blender Foundation/Blender/<version>/scripts/addons`
-   - macOS: `~/Library/Application Support/Blender/<version>/scripts/addons`
-   - Linux: `~/.config/blender/<version>/scripts/addons`
-2. Restart Blender and enable the add-on from **Preferences ▸ Add-ons**.
+1. Clone or copy this repository into your Blender extensions folder:
+   - Windows: `%APPDATA%/Blender Foundation/Blender/<version>/scripts/extensions`
+   - macOS: `~/Library/Application Support/Blender/<version>/scripts/extensions`
+   - Linux: `~/.config/blender/<version>/scripts/extensions`
+2. Ensure the folder name is `render_queue_manager_x`.
+3. Restart Blender and enable the extension from **Preferences > Extensions**.
+
+> Supporting Blender 4.1 or earlier? Use the final add-on zip from previous releases; the extension packaging requires Blender 4.2 or newer.
 
 ---
 
@@ -130,8 +134,8 @@ Bug reports, UX ideas, and documentation fixes are all welcome.
 
 ### Local Packaging
 
-- `python scripts/package_addon.py` builds `render-queue-manager-x-v<version>.zip` based on `bl_info`.
-- Use `--version` to override the detected version (for example `python scripts/package_addon.py --version 1.14.2`).
+- `python scripts/package_extension.py` builds `render-queue-manager-x-v<version>.zip` using metadata from `blender_manifest.toml`.
+- Use `--version` to override the detected version (for example `python scripts/package_extension.py --version 1.14.2`).
 - Pass `--out <folder>` to change the staging directory (defaults to `dist/`).
 
 ### GitHub Actions
@@ -160,4 +164,3 @@ Render Queue Manager X is distributed under the **GNU General Public License v3.
 
 - **Author:** Xnom3d
 - **Contributors:** Add your name via pull request!
-

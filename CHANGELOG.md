@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Converted the project to Blender's Extensions packaging, replacing `bl_info` with `blender_manifest.toml` and updated build tooling to match.
+
 ## [1.14.1] - 2025-10-11
 
 ### Changed

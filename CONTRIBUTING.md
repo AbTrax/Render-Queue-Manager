@@ -4,8 +4,8 @@ Thanks for your interest in improving Render Queue Manager X!
 
 ## Development Setup
 1. Clone the repository.
-2. Zip the root (containing `rqm/`) or create a symlink inside your Blender scripts/addons folder.
-3. Enable Render Queue Manager X in Blender preferences.
+2. Zip the root (containing `blender_manifest.toml` and `rqm/`) or create a symlink inside your Blender `scripts/extensions` folder.
+3. Enable Render Queue Manager X from Blender's Extensions preferences.
 
 ## Code Style
 - Keep modules focused (`properties`, `outputs`, `queue_ops`, `ui`, `utils`).
@@ -13,7 +13,7 @@ Thanks for your interest in improving Render Queue Manager X!
 - Prefer small functions; log warnings instead of raising unless fatal.
 
 ## Versioning
-Use semantic-like tuple in `bl_info['version']`. Bump patch for fixes, minor for features.
+Keep the version string in `__version__` and `blender_manifest.toml` aligned. Bump patch for fixes, minor for features.
 
 ## Pull Requests
 1. Describe feature or fix clearly.
