@@ -69,7 +69,7 @@ class RQM_UL_Tags(UIList):
 
 
 class RQM_PT_Panel(Panel):
-    bl_label = 'Render Queue Manager'
+    bl_label = 'Render Queue Manager X'
     bl_idname = 'RQM_PT_panel'
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
@@ -80,7 +80,7 @@ class RQM_PT_Panel(Panel):
         st = get_state(context)
         if st is None:
             box = layout.box()
-            box.label(text='Render Queue Manager not initialized.', icon='ERROR')
+            box.label(text='Render Queue Manager X not initialized.', icon='ERROR')
             box.label(text='Try disabling & re-enabling the add-on.')
             return
 

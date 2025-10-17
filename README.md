@@ -1,168 +1,163 @@
-<div align="center">
-<h1>Render Queue Manager</h1>
-<p><strong>Blender add-on for structured multi-job rendering with clean foldering, compositor integration, and stereoscopy.</strong></p>
-<p>
-<sup>Per-job folders · Zero-based numbering · File Output node management · Extension hooks · Windows‑safe paths</sup>
-</p>
-</div>
+# Render Queue Manager X — Reliable Multi-Job Rendering for Blender
+
+**Version:** 1.14.2 · **Blender Compatibility:** 3.0+
+
+Render Queue Manager X is a modular toolkit for orchestrating Blender renders authored by **Xnom3d**. Queue per-scene jobs, keep compositor outputs tidy, and ship consistent folders for every shot without babysitting renders. Install once and drive the workflow from the **Properties ▸ Output** tab under **Render Queue Manager X**.
+
+> 💡 Render Queue Manager X keeps evolving. Share ideas, pain points, or integrations you need and they can help steer upcoming releases.
 
 ---
 
-## ✨ Features
+## Features at a Glance
 
-- Per-job overrides: scene, camera, view layers, engine, resolution, animation range (remapped to start at frame 0 for consistent filenames).
-- Deterministic directory layout (with optional job-name prefixes for generated folders):
-  - Base renders: `<root>/<job_name>/base/<basename><frame>.ext`
-  - Compositor outputs: `<root>/<job_name>/<NodeName>/...` (no separate `comp/` folder)
-- Multiple Compositor File Output nodes per job (we only manage base path + optional format + default slot naming).
-- Smart slot naming: empty/default slot paths become `<job>_<basename>`.
-- Marker-linked frame ranges: when markers move, linked jobs update their start/end frames automatically.
-- Optional stereoscopic (multi‑view) rendering with selectable output format.
-- Non‑blocking compositor mode (warn instead of abort) per job.
-- Pluggable preprocessors: inject logic before each job via `JOB_PREPROCESSORS`.
-- Windows‑safe name sanitizing (reserved device names avoided).
-
-## 📦 Structure
-
-```text
-__init__.py        # Add-on entry (bl_info + registers submodules)
-rqm/
-  __init__.py      # Internal namespace
-  utils.py         # Sanitizing, tokens, path helpers
-  properties.py    # PropertyGroups (jobs, outputs, state)
-  comp.py          # Compositor File Output handling & path resolution
-  operators_queue.py     # Queue operators and render loop
-  operators_outputs.py   # Output mapping operators
-  handlers.py      # Render handlers (complete/cancel)
-  ui.py            # Panels & UILists
-```
-
-
-## 🔧 Installation
-
-1. Create a zip of the add-on root so the archive contains directly:
-   - `__init__.py`
-   - `rqm/` directory
-2. Blender → Edit → Preferences → Add-ons → Install… select the zip.
-3. Enable: Render Queue Manager.
-4. Open the panel in Properties → Output tab.
-
-## 🚀 Quick Start
-
-1. Open your target scene & camera.
-2. Add a job: Add Job (Current Scene/Camera).
-3. Adjust output folder (defaults to `//renders/`).
-4. (Optional) Enable animation & set start/end OR link timeline markers.
-5. (Optional) Enable Stereoscopic or Compositor Outputs.
-6. Press Start Queue.
-
-## 📁 Folder & Naming Model
-
-For a job named `Shot01_MainCam` with basename `render`:
-
-```text
-<output_root>/Shot01_MainCam/
-  base/render0000.png …
-  <FileOutputNodeName>/<job>_<basename>0000.png
-```
-
-Enable **Suffix folders with job name** on a job to automatically append `_JobName` to generated render and compositor directories when you need extra disambiguation.
-
-Animation frame range (e.g. 101–148) is internally remapped so exported files still begin at `0000`.
-
-## 🎞️ Stereoscopy
-
-Enable per job. Choose:
-
-- Stereo 3D (combined)
-- Multi-View Images (separate left/right)
-
-If disabled, we restore standard single‑view output.
-
-## 🧩 Compositor Outputs
-
-When enabled:
-
-1. Add one or more outputs.
-2. Choose (or auto-create) File Output nodes.
-3. Optionally pick base source: Job output folder, Scene output folder, or a folder inferred from a chosen file.
-4. Optional node-named and custom token subfolders (`{scene} {camera} {job} {node}`).
-5. Slots with default/empty paths are renamed to `<job>_<basename>`.
-
-Note: The previous “Detect View Tags” utility was removed. Use the free‑text Extra View Tags field to specify additional tags if needed.
-
-## 🔌 Extensibility
-
-This add-on is structured as a package under `rqm/`. You can import modules (e.g., `rqm.jobs.apply_job`) from scripts to drive custom workflows, or fork and extend operators/handlers.
-
-## 🐛 Troubleshooting
-
-| Issue | Cause | Fix |
-|-------|-------|-----|
-| Add-on fails: `No module named 'rqm'` | Zip contained an extra parent folder | Re-zip so `__init__.py` is at archive root |
-| Compositor outputs not written | Node missing or disabled | Enable node or use “Create if missing” |
-| Wrong frame numbers | Expectation of original frame numbers | Tool intentionally remaps to 0-based for consistent batches |
-| Overwriting from multiple jobs | Same job name/basename | Ensure unique job names or change basename |
-
-## ❓ FAQ
-
-**Why always start at 0000?**  Consistent naming prevents gaps and cross-project confusion when merging outputs.
-
-**Can I keep original frame numbers?** Not currently; a future option may allow an offset.
-
-**Does this change render settings permanently?** Only for the duration of the job; subsequent jobs override again.
-
-## 🗺️ Roadmap (Potential)
-
-- Queue import/export (JSON)
-- Per-job color management & sampling overrides
-- Dependency ordering (render B after A)
-- Optional original frame numbering toggle
-
-## 🤝 Contributing
-
-See `CONTRIBUTING.md`. Pull Requests welcome—keep changes modular.
-
-## 📄 License
-
-MIT. See `LICENSE`.
-
-## 🔢 Versioning
-
-Semantic-like tuple in `bl_info['version']`: (MAJOR, MINOR, PATCH). Patch = fixes / packaging, Minor = new features, Major = breaking changes.
-
-## 🛠️ Building / Packaging
-
-You can build the distributable zip in three ways:
-
-PowerShell (auto-detect version):
-
-```powershell
-pwsh scripts/build.ps1
-```
-
-Specify version override:
-
-```powershell
-pwsh scripts/build.ps1 -Version 1.10.6
-```
-
-Cross-platform Python script:
-
-```bash
-python scripts/package_addon.py
-```
-
-Override version:
-
-```bash
-python scripts/package_addon.py --version 1.10.6
-```
-
-Output: `render-queue-manager-vX.Y.Z.zip` at repo root and staging under `dist/`.
-
-GitHub Actions: Push a tag (`git tag -a v1.10.6 -m "Release" && git push origin v1.10.6`). Workflow builds, attaches zip, and creates release notes with commit diff since previous tag.
+- **Queue-Based Workflow**
+  - Capture scene, camera, frame range, engine, and resolution per job.
+  - Duplicate, reorder, or clear jobs without touching the base scene.
+- **Deterministic Output Layout**
+  - Every job renders to `<root>/<job>/base/<basename><frame>.<ext>`.
+  - Compositor outputs nest under `<root>/<job>/<NodeName>/…` with job-prefixed filenames.
+- **Compositor File Outputs**
+  - Manage multiple File Output nodes per job with optional auto-create.
+  - Override file format and encoding per output or inherit from the job.
+- **Timeline Marker Integration**
+  - Link start/end markers so frame ranges update automatically when you slide markers.
+  - Optional offsets keep handles attached while still exporting zero-based filenames.
+- **Stereoscopic & Multiview Support**
+  - Toggle stereoscopy per job with combined or split view exports.
+  - Add extra view tags and control output folder suffixing.
+- **Extensible Hooks**
+  - Register preprocessors that run before each job for custom validation or automation.
+  - Windows-safe path sanitizing keeps generated folders usable everywhere.
 
 ---
 
-Made for production batch rendering and extension. Enjoy.
+## Installation
+
+### From a Release Zip
+
+1. Download the latest `.zip` from the Releases page (or package this repository as a zip).
+2. In Blender, open **Edit ▸ Preferences ▸ Add-ons**.
+3. Click **Install**, choose the zip, enable **Render Queue Manager X**.
+
+### From Source (Developer Setup)
+
+1. Clone the repository into your Blender add-ons folder:
+   - Windows: `%APPDATA%/Blender Foundation/Blender/<version>/scripts/addons`
+   - macOS: `~/Library/Application Support/Blender/<version>/scripts/addons`
+   - Linux: `~/.config/blender/<version>/scripts/addons`
+2. Restart Blender and enable the add-on from **Preferences ▸ Add-ons**.
+
+---
+
+## Getting Started
+
+1. After enabling, head to **Properties ▸ Output** and locate the **Render Queue Manager X** panel.
+2. Press `Add Job (Current Scene/Camera)` to capture your starting setup.
+3. Point the job to an output folder (defaults to `//renders/`) and set a basename.
+4. Choose animation frames directly or link start/end markers for automatic updates.
+5. Enable Stereoscopy or Compositor Outputs if needed, then press **Start Queue**.
+
+Each panel section is collapsible so you can focus on the controls you need. Hover any field to see Blender tooltips for details.
+
+---
+
+## Tool Guide
+
+### Job Queue
+
+- Toggle job enable state, reorder entries, and duplicate setups for variants.
+- Override scene, camera, view layers, render engine, resolution, and sampling.
+- Rebase animation numbering so exported filenames always start at frame `0000`.
+
+### Compositor Outputs
+
+- Add multiple File Output bindings per job with optional creation if missing.
+- Pick base paths from the job folder, the scene output, or a manual file reference.
+- Apply node-named subfolders, custom tokens (`{scene}`, `{camera}`, `{job}`, `{node}`), and per-output encoding overrides.
+
+### Marker-Linked Ranges
+
+- Link start/end markers to keep queue entries synced to timeline edits.
+- Offsets let you include handles while still exporting remapped frame numbers.
+
+### Encoding Controls
+
+- Configure color mode, depth, compression, EXR codec, or JPEG quality per job.
+- Optionally delegate encoding to compositor nodes or override for each output.
+
+### Stereoscopic Output
+
+- Switch between combined stereo or multi-view image sequences.
+- Add supplemental view tags for pipeline integration and keep plain renders if desired.
+
+---
+
+## Release Notes
+
+### 1.14.2
+
+- Renamed the project to **Render Queue Manager X**.
+- Adopted the GPL license and refreshed documentation to match the new branding.
+
+Refer to `CHANGELOG.md` for a complete history of prior releases.
+
+---
+
+## Roadmap & Feedback
+
+Render Queue Manager X focuses on:
+
+- Additional queue utilities (JSON import/export, dependency chaining).
+- Quality-of-life tweaks surfaced from production usage.
+- Documentation, tutorial content, and automation helpers.
+
+Have a suggestion? Open an issue or start a discussion—community feedback guides upcoming work.
+
+---
+
+## Contributing
+
+1. Fork the repository and branch off from main.
+2. Follow Blender’s Python style (PEP 8) and keep modules focused.
+3. Run the add-on locally to verify your changes.
+4. Submit a pull request outlining motivation and testing (see `CONTRIBUTING.md`).
+
+Bug reports, UX ideas, and documentation fixes are all welcome.
+
+---
+
+## Automated Releases
+
+### Local Packaging
+
+- `python scripts/package_addon.py` builds `render-queue-manager-x-v<version>.zip` based on `bl_info`.
+- Use `--version` to override the detected version (for example `python scripts/package_addon.py --version 1.14.2`).
+- Pass `--out <folder>` to change the staging directory (defaults to `dist/`).
+
+### GitHub Actions
+
+- Push a tag beginning with `v` (e.g. `v1.14.2`) to trigger the Release workflow.
+- The workflow builds the zip, publishes a GitHub Release, and attaches the packaged artifact.
+- You can also run the action manually, providing a tag and optionally marking it draft or prerelease.
+- Every workflow upload is available as an artifact even if the release is not published.
+
+---
+
+## Support & Issues
+
+- File bugs, feature requests, and questions through the issue tracker.
+- For quick chats, join the project’s Discord or preferred community channel when available.
+
+---
+
+## License
+
+Render Queue Manager X is distributed under the **GNU General Public License v3.0 or later (GPL-3.0-or-later)**. See `LICENSE` for full terms.
+
+---
+
+## Credits
+
+- **Author:** Xnom3d
+- **Contributors:** Add your name via pull request!
+

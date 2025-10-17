@@ -1,4 +1,4 @@
-"""Subpackage initializer for Render Queue Manager.
+"""Subpackage initializer for Render Queue Manager X.
 Exposes key symbols so other modules can rely on package-level imports if needed.
 """
 from .utils import (

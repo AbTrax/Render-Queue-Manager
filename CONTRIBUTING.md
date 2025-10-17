@@ -1,11 +1,11 @@
 # Contributing
 
-Thanks for your interest in improving Render Queue Manager!
+Thanks for your interest in improving Render Queue Manager X!
 
 ## Development Setup
 1. Clone the repository.
 2. Zip the root (containing `rqm/`) or create a symlink inside your Blender scripts/addons folder.
-3. Enable the add-on in Blender preferences.
+3. Enable Render Queue Manager X in Blender preferences.
 
 ## Code Style
 - Keep modules focused (`properties`, `outputs`, `queue_ops`, `ui`, `utils`).
@@ -29,4 +29,4 @@ rqm.queue_ops.JOB_PREPROCESSORS.append(lambda job, scene: (True, ''))
 Return `(False, 'reason')` to skip a job.
 
 ## License
-By contributing you agree your code is MIT licensed.
+By contributing you agree your code is licensed under the GPL-3.0-or-later.

@@ -1,6 +1,6 @@
 Param(
     [string]$Version,
-    [string]$FolderName = "render_queue_manager"
+    [string]$FolderName = "render_queue_manager_x"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,7 +18,7 @@ if (-not $Version) {
     }
 }
 
-Write-Host "Building Render Queue Manager v$Version" -ForegroundColor Cyan
+Write-Host "Building Render Queue Manager X v$Version" -ForegroundColor Cyan
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $dist = Join-Path $repoRoot 'dist'
@@ -34,7 +34,7 @@ Copy-Item (Join-Path $repoRoot 'CHANGELOG.md') $staging
 Copy-Item (Join-Path $repoRoot 'LICENSE') $staging
 Copy-Item -Recurse -Destination (Join-Path $staging 'rqm') -Path (Join-Path $repoRoot 'rqm')
 
-$zipName = "render-queue-manager-v$Version.zip"
+$zipName = "render-queue-manager-x-v$Version.zip"
 $zipPath = Join-Path $repoRoot $zipName
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 

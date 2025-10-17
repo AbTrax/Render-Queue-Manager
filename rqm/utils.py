@@ -1,4 +1,4 @@
-"""Utility helpers for Render Queue Manager.
+"""Utility helpers for Render Queue Manager X.
 Separated from monolithic script.
 """
 from __future__ import annotations

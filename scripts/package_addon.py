@@ -32,7 +32,7 @@ def read_version() -> str:
 
 
 def build(version: str, out_dir: Path) -> Path:
-    folder_name = 'render_queue_manager'
+    folder_name = 'render_queue_manager_x'
     staging_root = out_dir / folder_name
     if staging_root.exists():
         shutil.rmtree(staging_root)
@@ -43,7 +43,7 @@ def build(version: str, out_dir: Path) -> Path:
         shutil.copy2(ROOT / fname, staging_root / fname)
     shutil.copytree(ROOT / 'rqm', staging_root / 'rqm')
 
-    zip_name = f'render-queue-manager-v{version}.zip'
+    zip_name = f'render-queue-manager-x-v{version}.zip'
     zip_path = ROOT / zip_name
     if zip_path.exists():
         zip_path.unlink()

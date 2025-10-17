@@ -1,10 +1,10 @@
 bl_info = {
-    'name': 'Render Queue Manager',
+    'name': 'Render Queue Manager X',
     'author': 'Xnom3d',
     'version': (1, 14, 2),
     'blender': (3, 0, 0),
-    'location': 'Properties > Output > Render Queue Manager',
-    'description': 'Queue renders with per‑job folders & compositor outputs; modular package version.',
+    'location': 'Properties > Output > Render Queue Manager X',
+    'description': 'Queue renders with per-job folders & compositor outputs; modular package version.',
     'category': 'Render',
 }
 
