@@ -24,6 +24,71 @@ def _draw_encoding_controls(layout, encoding, file_format):
         layout.prop(encoding, 'exr_codec')
 
 
+def _draw_stats_tab(layout, st):
+    box = layout.box()
+    try:
+        has_queue = len(getattr(st, 'queue', [])) > 0
+    except Exception:
+        has_queue = False
+    if (
+        getattr(st, 'running', False)
+        and getattr(st, 'current_job_index', -1) >= 0
+        and has_queue
+    ):
+        try:
+            job = st.queue[st.current_job_index]
+            job_label = getattr(job, 'name', '') or f"{job.scene_name}:{job.camera_name or '<no cam>'}"
+            box.label(text=f'Active Job: {job_label}', icon='RENDER_RESULT')
+        except Exception:
+            pass
+    status = (getattr(st, 'stats_status', '') or 'Idle').strip()
+    box.label(text=f'Status: {status}', icon='INFO')
+    try:
+        progress = float(getattr(st, 'stats_progress', 0.0) or 0.0)
+    except Exception:
+        progress = 0.0
+    progress = max(0.0, min(progress, 1.0))
+    progress_row = box.row()
+    progress_row.enabled = False
+    progress_row.prop(
+        st,
+        'stats_progress',
+        text=f"Progress ({progress * 100:.1f}%)",
+        slider=True,
+    )
+    lines = getattr(st, 'stats_lines', None)
+    if not lines or len(lines) == 0:
+        box.label(text='No render statistics available yet.', icon='TIME')
+        return
+    for entry in lines:
+        label = (getattr(entry, 'label', '') or '').strip()
+        value = (getattr(entry, 'value', '') or '').strip()
+        row = box.row(align=True)
+        if label and value:
+            display_label = label if label.endswith(':') else f'{label}:'
+            row.label(text=display_label)
+            row.label(text=value)
+        elif value:
+            row.label(text=value)
+        else:
+            row.label(text=label or '-')
+
+
+def _draw_queue_controls(layout, st):
+    layout.separator()
+    controls = layout.row(align=True)
+    if not getattr(st, 'running', False):
+        controls.operator('rqm.start_queue', icon='RENDER_ANIMATION')
+    else:
+        controls.operator('rqm.stop_queue', icon='CANCEL')
+    if getattr(st, 'running', False) and getattr(st, 'current_job_index', -1) >= 0 and len(getattr(st, 'queue', [])) > 0:
+        total = len(st.queue)
+        display_idx = min(max(st.current_job_index, 0) + 1, total)
+        layout.label(text=f'Running. Job {display_idx}/{total}')
+    else:
+        layout.label(text='Idle')
+
+
 class RQM_UL_Queue(UIList):
     bl_idname = 'RQM_UL_Queue'
 
@@ -82,6 +147,13 @@ class RQM_PT_Panel(Panel):
             box = layout.box()
             box.label(text='Render Queue Manager X not initialized.', icon='ERROR')
             box.label(text='Try disabling & re-enabling the add-on.')
+            return
+
+        tab_row = layout.row(align=True)
+        tab_row.prop(st, 'ui_tab', expand=True)
+        if getattr(st, 'ui_tab', 'QUEUE') == 'STATS':
+            _draw_stats_tab(layout, st)
+            _draw_queue_controls(layout, st)
             return
 
         header = layout.row(align=True)
@@ -260,15 +332,4 @@ class RQM_PT_Panel(Panel):
                     sub.prop(out, 'extra_subfolder')
                     sub.prop(out, 'ensure_dirs')
 
-        layout.separator()
-        controls = layout.row(align=True)
-        if not st.running:
-            controls.operator('rqm.start_queue', icon='RENDER_ANIMATION')
-        else:
-            controls.operator('rqm.stop_queue', icon='CANCEL')
-        if st.running and st.current_job_index >= 0 and len(st.queue) > 0:
-            total = len(st.queue)
-            display_idx = min(max(st.current_job_index, 0) + 1, total)
-            layout.label(text=f'Running. Job {display_idx}/{total}')
-        else:
-            layout.label(text='Idle')
+        _draw_queue_controls(layout, st)

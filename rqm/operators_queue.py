@@ -381,6 +381,16 @@ class RQM_OT_StartQueue(Operator):
         st.running = True
         st.current_job_index = 0
         st.render_in_progress = False
+        try:
+            st.stats_lines.clear()
+        except Exception:
+            pass
+        try:
+            st.stats_progress = 0.0
+            st.stats_status = 'Waiting for Blender render'
+            st.stats_raw = ''
+        except Exception:
+            pass
         context.window_manager.modal_handler_add(self)
         self.report({'INFO'}, 'Render queue started.')
         return {'RUNNING_MODAL'}
@@ -453,5 +463,15 @@ class RQM_OT_StopQueue(Operator):
         st.running = False
         st.current_job_index = -1
         st.render_in_progress = False
+        try:
+            st.stats_lines.clear()
+        except Exception:
+            pass
+        try:
+            st.stats_progress = 0.0
+            st.stats_status = 'Idle'
+            st.stats_raw = ''
+        except Exception:
+            pass
         self.report({'INFO'}, 'Queue stopped.')
         return {'FINISHED'}

@@ -19,7 +19,7 @@ if any(m.startswith(_pkg_name + '.rqm') for m in list(sys.modules.keys())):
             except Exception:
                 pass
 
-from .rqm.properties import RQM_CompOutput, RQM_EncodingSettings, RQM_Job, RQM_State, RQM_Tag
+from .rqm.properties import RQM_CompOutput, RQM_EncodingSettings, RQM_Job, RQM_RenderStat, RQM_State, RQM_Tag
 from .rqm.operators_queue import (
     RQM_OT_AddFromCurrent, RQM_OT_AddCamerasInScene, RQM_OT_RemoveJob, RQM_OT_ClearQueue,
     RQM_OT_MoveJob, RQM_OT_StartQueue, RQM_OT_StopQueue,
@@ -36,7 +36,7 @@ import bpy  # type: ignore
 from bpy.props import PointerProperty  # type: ignore
 
 classes = (
-    RQM_Tag, RQM_EncodingSettings, RQM_CompOutput, RQM_Job, RQM_State,
+    RQM_Tag, RQM_EncodingSettings, RQM_CompOutput, RQM_RenderStat, RQM_Job, RQM_State,
     RQM_OT_AddFromCurrent, RQM_OT_AddCamerasInScene, RQM_OT_RemoveJob, RQM_OT_ClearQueue,
     RQM_OT_MoveJob, RQM_OT_StartQueue, RQM_OT_StopQueue,
     RQM_OT_DuplicateJob,

@@ -20,12 +20,125 @@ def _tagged(hlist):
 
 
 _marker_cache = {}
+_current_render_state = None
+_STATS_PERCENT_RE = re.compile(r'(\d+(?:\.\d+)?)\s*%')
+
+
+def _active_state(scene=None):
+    """Return the add-on state from the given scene or best-known context."""
+    global _current_render_state
+    if scene and hasattr(scene, 'rqm_state'):
+        st = getattr(scene, 'rqm_state', None)
+        if st:
+            _current_render_state = st
+            return st
+    try:
+        context_scene = bpy.context.scene
+    except Exception:
+        context_scene = None
+    if context_scene and hasattr(context_scene, 'rqm_state'):
+        st = getattr(context_scene, 'rqm_state', None)
+        if st:
+            _current_render_state = st
+            return st
+    return _current_render_state
+
+
+def _reset_stats(st, status='Idle'):
+    if not st:
+        return
+    try:
+        st.stats_status = status
+    except Exception:
+        pass
+    try:
+        st.stats_progress = 0.0
+    except Exception:
+        pass
+    try:
+        st.stats_raw = ''
+    except Exception:
+        pass
+    try:
+        st.stats_lines.clear()
+    except Exception:
+        pass
+
+
+def _apply_stats(st, stats):
+    if not st:
+        return
+    text = str(stats or '').replace('\r\n', '\n').strip()
+    previous = getattr(st, 'stats_progress', 0.0)
+    found_progress = False
+    try:
+        st.stats_raw = text
+    except Exception:
+        pass
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    try:
+        st.stats_lines.clear()
+    except Exception:
+        pass
+    if not lines:
+        return
+    try:
+        st.stats_status = lines[0]
+    except Exception:
+        pass
+    for line in lines:
+        if ':' in line:
+            label, value = line.split(':', 1)
+            label = label.strip()
+            value = value.strip()
+        else:
+            label = line
+            value = ''
+        try:
+            entry = st.stats_lines.add()
+            entry.label = label
+            entry.value = value
+        except Exception:
+            pass
+        search_texts = (value, label)
+        for chunk in search_texts:
+            match = _STATS_PERCENT_RE.search(chunk)
+            if match:
+                try:
+                    pct = float(match.group(1)) / 100.0
+                    pct = max(0.0, min(pct, 1.0))
+                    st.stats_progress = pct
+                    found_progress = True
+                    break
+                except Exception:
+                    pass
+    if not found_progress:
+        try:
+            st.stats_progress = previous
+        except Exception:
+            pass
+
+
+def _mark_status(st, status, progress=None):
+    if not st:
+        return
+    try:
+        st.stats_status = status
+    except Exception:
+        pass
+    if progress is not None:
+        try:
+            st.stats_progress = progress
+        except Exception:
+            pass
 
 def register_handlers():
     _marker_cache.clear()
     if not _tagged(bpy.app.handlers.render_complete):
-        def _on_render_complete(_):
-            st = bpy.context.scene.rqm_state
+        def _on_render_complete(scene):
+            st = _active_state(scene)
+            if not st:
+                return
             was_render = st.render_in_progress
             st.render_in_progress = False
             # Attempt stereo rename for just-finished job (current_job_index points to finished job)
@@ -46,17 +159,21 @@ def register_handlers():
             if st.running and was_render and not getattr(st, '_skip_increment_once', False) and st.current_job_index < len(st.queue):
                 st.current_job_index += 1
             st._skip_increment_once = False
+            _mark_status(st, 'Render finished', progress=1.0)
         _on_render_complete._rqm_tag = True
         bpy.app.handlers.render_complete.append(_on_render_complete)
 
     if not _tagged(bpy.app.handlers.render_cancel):
-        def _on_render_cancel(_):
-            st = bpy.context.scene.rqm_state
+        def _on_render_cancel(scene):
+            st = _active_state(scene)
+            if not st:
+                return
             was_render = st.render_in_progress
             st.render_in_progress = False
             if st.running and was_render and not getattr(st, '_skip_increment_once', False) and st.current_job_index < len(st.queue):
                 st.current_job_index += 1
             st._skip_increment_once = False
+            _mark_status(st, 'Render cancelled')
         _on_render_cancel._rqm_tag = True
         bpy.app.handlers.render_cancel.append(_on_render_cancel)
 
@@ -68,6 +185,33 @@ def register_handlers():
                 pass
         _on_depsgraph_update._rqm_tag = True
         bpy.app.handlers.depsgraph_update_post.append(_on_depsgraph_update)
+
+    if not _tagged(bpy.app.handlers.render_init):
+        def _on_render_init(scene):
+            st = _active_state(scene)
+            if not st:
+                return
+            status = 'Initializing render'
+            try:
+                if st.running and 0 <= st.current_job_index < len(st.queue):
+                    job = st.queue[st.current_job_index]
+                    job_name = getattr(job, 'name', '')
+                    if job_name:
+                        status = f'Initializing render: {job_name}'
+            except Exception:
+                pass
+            _reset_stats(st, status=status)
+        _on_render_init._rqm_tag = True
+        bpy.app.handlers.render_init.append(_on_render_init)
+
+    if not _tagged(bpy.app.handlers.render_stats):
+        def _on_render_stats(stats):
+            st = _active_state()
+            if not st:
+                return
+            _apply_stats(st, stats)
+        _on_render_stats._rqm_tag = True
+        bpy.app.handlers.render_stats.append(_on_render_stats)
 
 def _remove_tagged(hlist):
     try:
@@ -86,8 +230,12 @@ def unregister_handlers():
         _remove_tagged(bpy.app.handlers.render_complete)
         _remove_tagged(bpy.app.handlers.render_cancel)
         _remove_tagged(bpy.app.handlers.depsgraph_update_post)
+        _remove_tagged(bpy.app.handlers.render_init)
+        _remove_tagged(bpy.app.handlers.render_stats)
     except Exception:
         pass
+    global _current_render_state
+    _current_render_state = None
 
 # ---- Internal helpers ----
 

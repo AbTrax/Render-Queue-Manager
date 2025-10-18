@@ -7,6 +7,7 @@ from bpy.props import (  # type: ignore
     BoolProperty,
     CollectionProperty,
     EnumProperty,
+    FloatProperty,
     IntProperty,
     PointerProperty,
     StringProperty,
@@ -26,6 +27,7 @@ __all__ = [
     'RQM_Tag',
     'RQM_EncodingSettings',
     'RQM_CompOutput',
+    'RQM_RenderStat',
     'RQM_Job',
     'RQM_State',
     'get_job_view_layer_names',
@@ -247,6 +249,11 @@ class RQM_CompOutput(PropertyGroup):
     encoding: PointerProperty(type=RQM_EncodingSettings)
 
 
+class RQM_RenderStat(PropertyGroup):
+    label: StringProperty(name='Label', default='')
+    value: StringProperty(name='Value', default='')
+
+
 def _on_job_scene_change(self, context):
     scene_name = getattr(self, 'scene_name', '')
     scn = bpy.data.scenes.get(scene_name) if scene_name else None
@@ -423,3 +430,21 @@ class RQM_State(PropertyGroup):
     current_job_index: IntProperty(default=-1)
     render_in_progress: BoolProperty(default=False)
     job_filter: StringProperty(name='Filter Jobs', default='')
+    ui_tab: EnumProperty(
+        name='Active Tab',
+        items=[
+            ('QUEUE', 'Queue', 'Manage render queue jobs'),
+            ('STATS', 'Render Stats', 'View live render statistics'),
+        ],
+        default='QUEUE',
+    )
+    stats_status: StringProperty(name='Render Status', default='Idle')
+    stats_progress: FloatProperty(
+        name='Progress',
+        default=0.0,
+        min=0.0,
+        max=1.0,
+        subtype='FACTOR',
+    )
+    stats_raw: StringProperty(name='Raw Stats', default='', options={'HIDDEN'})
+    stats_lines: CollectionProperty(type=RQM_RenderStat)
