@@ -114,7 +114,11 @@ def _derive_subfolder_tokens(job: RQM_Job, base_dir: str, *fallback_tokens: str)
 def job_file_prefix(job: RQM_Job, base_dir: str, *fallback_tokens: str) -> str:
     """Build the filename prefix `<job>_<subfolders> ` for render and compositor outputs."""
     safe_job = _sanitize_component(job.name or 'job')
-    sub_tokens = _derive_subfolder_tokens(job, base_dir, *fallback_tokens)
+    file_base = _sanitize_component(getattr(job, 'file_basename', '') or '')
+    if file_base:
+        sub_tokens = [file_base]
+    else:
+        sub_tokens = _derive_subfolder_tokens(job, base_dir, *fallback_tokens)
     safe_tail = '_'.join(_sanitize_component(tok).replace(' ', '_') for tok in sub_tokens if tok)
     if not safe_tail or safe_tail.lower() == safe_job.lower():
         prefix = safe_job

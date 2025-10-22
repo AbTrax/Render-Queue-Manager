@@ -430,6 +430,7 @@ class RQM_State(PropertyGroup):
     current_job_index: IntProperty(default=-1)
     render_in_progress: BoolProperty(default=False)
     job_filter: StringProperty(name='Filter Jobs', default='')
+    ui_prev_tab: StringProperty(default='QUEUE', options={'HIDDEN'})
     ui_tab: EnumProperty(
         name='Active Tab',
         items=[

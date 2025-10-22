@@ -378,6 +378,8 @@ class RQM_OT_StartQueue(Operator):
         if st is None or st.running or not st.queue:
             return {'CANCELLED'}
         register_handlers()
+        st.ui_prev_tab = getattr(st, 'ui_tab', 'QUEUE')
+        st.ui_tab = 'STATS'
         st.running = True
         st.current_job_index = 0
         st.render_in_progress = False
@@ -410,6 +412,10 @@ class RQM_OT_StartQueue(Operator):
         if st.current_job_index >= len(st.queue):
             st.running = False
             st.current_job_index = -1
+            try:
+                st.ui_tab = getattr(st, 'ui_prev_tab', 'QUEUE') or 'QUEUE'
+            except Exception:
+                st.ui_tab = 'QUEUE'
             self.report({'INFO'}, 'Queue complete.')
             return {'FINISHED'}
         # Fallback: if we think a render is in progress but Blender reports none, advance
@@ -473,5 +479,9 @@ class RQM_OT_StopQueue(Operator):
             st.stats_raw = ''
         except Exception:
             pass
+        try:
+            st.ui_tab = getattr(st, 'ui_prev_tab', 'QUEUE') or 'QUEUE'
+        except Exception:
+            st.ui_tab = 'QUEUE'
         self.report({'INFO'}, 'Queue stopped.')
         return {'FINISHED'}
