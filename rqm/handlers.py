@@ -22,6 +22,8 @@ def _tagged(hlist):
 _marker_cache = {}
 _current_render_state = None
 _STATS_PERCENT_RE = re.compile(r'(\d+(?:\.\d+)?)\s*%')
+_MARKER_TIMER_INTERVAL = 0.35
+_marker_timer_enabled = False
 
 
 def _active_state(scene=None):
@@ -132,6 +134,42 @@ def _mark_status(st, status, progress=None):
         except Exception:
             pass
 
+
+def _marker_timer():
+    global _marker_timer_enabled
+    if not _marker_timer_enabled:
+        return None
+    try:
+        _sync_marker_links()
+    except Exception:
+        pass
+    return _MARKER_TIMER_INTERVAL
+
+
+def _ensure_marker_timer():
+    global _marker_timer_enabled
+    if _marker_timer_enabled:
+        return
+    _marker_timer_enabled = True
+    try:
+        _sync_marker_links()
+    except Exception:
+        pass
+    try:
+        bpy.app.timers.register(
+            _marker_timer,
+            first_interval=_MARKER_TIMER_INTERVAL,
+            persistent=True,
+        )
+    except TypeError:
+        try:
+            bpy.app.timers.register(_marker_timer)
+        except Exception:
+            _marker_timer_enabled = False
+    except Exception:
+        _marker_timer_enabled = False
+
+
 def register_handlers():
     _marker_cache.clear()
     if not _tagged(bpy.app.handlers.render_complete):
@@ -177,15 +215,6 @@ def register_handlers():
         _on_render_cancel._rqm_tag = True
         bpy.app.handlers.render_cancel.append(_on_render_cancel)
 
-    if not _tagged(bpy.app.handlers.depsgraph_update_post):
-        def _on_depsgraph_update(scene, depsgraph):
-            try:
-                _sync_marker_links()
-            except Exception:
-                pass
-        _on_depsgraph_update._rqm_tag = True
-        bpy.app.handlers.depsgraph_update_post.append(_on_depsgraph_update)
-
     if not _tagged(bpy.app.handlers.render_init):
         def _on_render_init(scene):
             st = _active_state(scene)
@@ -212,6 +241,7 @@ def register_handlers():
             _apply_stats(st, stats)
         _on_render_stats._rqm_tag = True
         bpy.app.handlers.render_stats.append(_on_render_stats)
+    _ensure_marker_timer()
 
 def _remove_tagged(hlist):
     try:
@@ -229,13 +259,18 @@ def unregister_handlers():
     try:
         _remove_tagged(bpy.app.handlers.render_complete)
         _remove_tagged(bpy.app.handlers.render_cancel)
-        _remove_tagged(bpy.app.handlers.depsgraph_update_post)
         _remove_tagged(bpy.app.handlers.render_init)
         _remove_tagged(bpy.app.handlers.render_stats)
     except Exception:
         pass
     global _current_render_state
     _current_render_state = None
+    global _marker_timer_enabled
+    _marker_timer_enabled = False
+    try:
+        bpy.app.timers.unregister(_marker_timer)
+    except Exception:
+        pass
 
 # ---- Internal helpers ----
 
