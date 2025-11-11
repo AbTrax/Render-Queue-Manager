@@ -14,6 +14,8 @@ from .properties import RQM_Job, set_job_view_layer_names, sync_job_view_layers
 from .state import get_state
 from .utils import _sanitize_component, view_layer_identifier_map
 
+_STALL_POLL_THRESHOLD = 12
+
 
 # ---- Local item callbacks (avoid lambda for Blender EnumProperty) ----
 def _operator_scene_items(self, context):
@@ -275,6 +277,7 @@ class RQM_OT_DuplicateJob(Operator):
             'file_format',
             'output_path',
             'file_basename',
+            'prefix_files_with_job_name',
             'suffix_output_folders_with_job',
             'rebase_numbering',
             'use_comp_outputs',
@@ -301,6 +304,7 @@ class RQM_OT_DuplicateJob(Operator):
                     'extra_subfolder',
                     'ensure_dirs',
                     'override_node_format',
+                    'file_basename',
                 ]:
                     if hasattr(out, a):
                         setattr(new_out, a, getattr(out, a))
@@ -383,6 +387,7 @@ class RQM_OT_StartQueue(Operator):
         st.running = True
         st.current_job_index = 0
         st.render_in_progress = False
+        st.stall_polls = 0
         try:
             st.stats_lines.clear()
         except Exception:
@@ -412,6 +417,7 @@ class RQM_OT_StartQueue(Operator):
         if st.current_job_index >= len(st.queue):
             st.running = False
             st.current_job_index = -1
+            st.stall_polls = 0
             try:
                 st.ui_tab = getattr(st, 'ui_prev_tab', 'QUEUE') or 'QUEUE'
             except Exception:
@@ -420,17 +426,23 @@ class RQM_OT_StartQueue(Operator):
             return {'FINISHED'}
         # Fallback: if we think a render is in progress but Blender reports none, advance
         if st.render_in_progress:
-            stalled = False
+            job_running = True
             try:
-                if not bpy.app.is_job_running('RENDER'):
-                    stalled = True
+                job_running = bpy.app.is_job_running('RENDER')
             except Exception:
-                pass
-            if stalled:
-                print('[RQM] Detected stalled render flag, auto-advancing queue.')
-                st._skip_increment_once = True  # prevent handler increment duplication
-                st.render_in_progress = False
-                st.current_job_index += 1
+                job_running = True
+            if job_running:
+                st.stall_polls = 0
+                return {'PASS_THROUGH'}
+            polls = max(0, getattr(st, 'stall_polls', 0)) + 1
+            st.stall_polls = polls
+            if polls < _STALL_POLL_THRESHOLD:
+                return {'PASS_THROUGH'}
+            st.stall_polls = 0
+            print('[RQM] Detected stalled render flag, auto-advancing queue.')
+            st._skip_increment_once = True  # prevent handler increment duplication
+            st.render_in_progress = False
+            st.current_job_index += 1
             return {'PASS_THROUGH'}
         job = st.queue[st.current_job_index]
         ok, msg = apply_job(job)
@@ -439,6 +451,7 @@ class RQM_OT_StartQueue(Operator):
             st.current_job_index += 1
             return {'PASS_THROUGH'}
         st.render_in_progress = True
+        st.stall_polls = 0
         try:
             # Use EXEC_DEFAULT to avoid needing the Image Editor
             # foreground; more reliable unattended.
@@ -469,6 +482,7 @@ class RQM_OT_StopQueue(Operator):
         st.running = False
         st.current_job_index = -1
         st.render_in_progress = False
+        st.stall_polls = 0
         try:
             st.stats_lines.clear()
         except Exception:

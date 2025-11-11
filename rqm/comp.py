@@ -111,19 +111,30 @@ def _derive_subfolder_tokens(job: RQM_Job, base_dir: str, *fallback_tokens: str)
     return ['output']
 
 
-def job_file_prefix(job: RQM_Job, base_dir: str, *fallback_tokens: str) -> str:
+def job_file_prefix(job: RQM_Job, base_dir: str, *fallback_tokens: str, override_token: str | None = None) -> str:
     """Build the filename prefix `<job>_<subfolders> ` for render and compositor outputs."""
     safe_job = _sanitize_component(job.name or 'job')
-    file_base = _sanitize_component(getattr(job, 'file_basename', '') or '')
-    if file_base:
-        sub_tokens = [file_base]
+    include_job_name = getattr(job, 'prefix_files_with_job_name', True)
+    if override_token:
+        cleaned_override = _sanitize_component(override_token)
+        sub_tokens = [cleaned_override] if cleaned_override else []
     else:
-        sub_tokens = _derive_subfolder_tokens(job, base_dir, *fallback_tokens)
+        file_base = _sanitize_component(getattr(job, 'file_basename', '') or '')
+        if file_base:
+            sub_tokens = [file_base]
+        else:
+            sub_tokens = _derive_subfolder_tokens(job, base_dir, *fallback_tokens)
     safe_tail = '_'.join(_sanitize_component(tok).replace(' ', '_') for tok in sub_tokens if tok)
-    if not safe_tail or safe_tail.lower() == safe_job.lower():
-        prefix = safe_job
+    if include_job_name:
+        if not safe_tail or safe_tail.lower() == safe_job.lower():
+            prefix = safe_job
+        else:
+            prefix = f'{safe_job}_{safe_tail}'
     else:
-        prefix = f'{safe_job}_{safe_tail}'
+        prefix = safe_tail or safe_job
+    prefix = prefix.strip()
+    if not prefix:
+        prefix = safe_job
     if not prefix.endswith(' '):
         prefix = prefix + ' '
     return prefix
@@ -241,14 +252,52 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
     fallback_tokens = [tok for tok in (extra_hint, node_hint) if tok]
     if not fallback_tokens:
         fallback_tokens.append('comp')
-    target_prefix = job_file_prefix(job, base_dir, *fallback_tokens)
+    override_token = None
+    if getattr(out, 'file_basename', '').strip():
+        raw_name = _tokens(out.file_basename, scn, job.name, job.camera_name, node_name=node.name).strip()
+        cleaned = _sanitize_component(raw_name)
+        if cleaned:
+            override_token = cleaned
+    target_prefix = job_file_prefix(job, base_dir, *fallback_tokens, override_token=override_token)
     _ensure_min_slot(node, target_prefix)
-    # Only override default/empty slot names ('', 'image', 'render') to avoid clobbering user custom slot paths
+    default_names = {'image', 'render'}
     try:
-        for fs in node.file_slots:
-            if not fs.path or fs.path.lower() in {'image','render'}:
+        slots = list(node.file_slots)
+    except Exception:
+        slots = []
+    try:
+        slot_total = len(slots)
+        for idx, fs in enumerate(slots):
+            desired = False
+            path_clean = (getattr(fs, 'path', '') or '').strip().replace('\\', '/').rstrip('/')
+            norm = path_clean.lower()
+            if override_token:
+                desired = True
+            elif not norm:
+                desired = True
+            else:
+                for base in default_names:
+                    if norm == base:
+                        desired = True
+                        break
+                    if norm.startswith(f'{base}.') or norm.startswith(f'{base}_'):
+                        desired = True
+                        break
+                if not desired and (norm.endswith('/render') or norm.endswith('/image')):
+                    desired = True
+            if not desired:
+                continue
+            suffix = ''
+            if slot_total > 1:
+                label = getattr(fs, 'name', '') or getattr(fs, 'path', '')
+                suffix = _sanitize_component(label)
+                if not suffix:
+                    suffix = f'slot{idx+1}'
+            if suffix:
+                prefix_core = target_prefix.rstrip()
+                fs.path = f"{prefix_core}_{suffix} "
+            else:
                 fs.path = target_prefix
-            # If user custom path lacks trailing space, optionally keep as-is (don't force)
     except Exception:
         pass
     # Auto-link first unlinked input to Render Layers if possible (helps ensure node writes files)

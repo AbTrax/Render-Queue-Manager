@@ -291,6 +291,10 @@ class RQM_PT_Panel(Panel):
             col.label(text='Standard Output', icon='FILE_FOLDER')
             col.prop(job, 'file_format')
             col.prop(job, 'output_path')
+            if hasattr(job, 'file_basename'):
+                col.prop(job, 'file_basename', text='Filename prefix')
+            if hasattr(job, 'prefix_files_with_job_name'):
+                col.prop(job, 'prefix_files_with_job_name')
             preview = _standard_output_preview(job)
             if preview:
                 col.label(text=f'Example file: {preview}', icon='FILE')
@@ -373,5 +377,7 @@ class RQM_PT_Panel(Panel):
                     sub.prop(out, 'use_node_named_subfolder')
                     sub.prop(out, 'extra_subfolder')
                     sub.prop(out, 'ensure_dirs')
+                    if hasattr(out, 'file_basename'):
+                        sub.prop(out, 'file_basename', text='Filename prefix')
 
         _draw_queue_controls(layout, st)

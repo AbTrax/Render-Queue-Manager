@@ -24,6 +24,7 @@ _current_render_state = None
 _STATS_PERCENT_RE = re.compile(r'(\d+(?:\.\d+)?)\s*%')
 _MARKER_TIMER_INTERVAL = 0.35
 _marker_timer_enabled = False
+_rebase_progress = {}
 
 
 def _active_state(scene=None):
@@ -172,13 +173,25 @@ def _ensure_marker_timer():
 
 def register_handlers():
     _marker_cache.clear()
+    _rebase_progress.clear()
     if not _tagged(bpy.app.handlers.render_complete):
         def _on_render_complete(scene):
             st = _active_state(scene)
             if not st:
                 return
             was_render = st.render_in_progress
+            finished_job = None
+            try:
+                idx = st.current_job_index
+                if 0 <= idx < len(st.queue):
+                    finished_job = st.queue[idx]
+            except Exception:
+                finished_job = None
             st.render_in_progress = False
+            try:
+                st.stall_polls = 0
+            except Exception:
+                pass
             # Attempt stereo rename for just-finished job (current_job_index points to finished job)
             try:
                 idx = st.current_job_index
@@ -190,6 +203,10 @@ def register_handlers():
                     try:
                         if getattr(job, 'use_animation', False) and getattr(job, 'rebase_numbering', True):
                             _rebase_numbering(job)
+                    except Exception:
+                        pass
+                    try:
+                        _rebase_progress.pop(job.as_pointer(), None)
                     except Exception:
                         pass
             except Exception:
@@ -206,12 +223,28 @@ def register_handlers():
             st = _active_state(scene)
             if not st:
                 return
+            finished_job = None
+            try:
+                idx = st.current_job_index
+                if 0 <= idx < len(st.queue):
+                    finished_job = st.queue[idx]
+            except Exception:
+                finished_job = None
             was_render = st.render_in_progress
             st.render_in_progress = False
+            try:
+                st.stall_polls = 0
+            except Exception:
+                pass
             if st.running and was_render and not getattr(st, '_skip_increment_once', False) and st.current_job_index < len(st.queue):
                 st.current_job_index += 1
             st._skip_increment_once = False
             _mark_status(st, 'Render cancelled')
+            if finished_job:
+                try:
+                    _rebase_progress.pop(finished_job.as_pointer(), None)
+                except Exception:
+                    pass
         _on_render_cancel._rqm_tag = True
         bpy.app.handlers.render_cancel.append(_on_render_cancel)
 
@@ -241,6 +274,33 @@ def register_handlers():
             _apply_stats(st, stats)
         _on_render_stats._rqm_tag = True
         bpy.app.handlers.render_stats.append(_on_render_stats)
+    if not _tagged(bpy.app.handlers.render_write):
+        def _on_render_write(scene):
+            st = _active_state(scene)
+            if not st:
+                return
+            if not getattr(st, 'running', False):
+                return
+            idx = getattr(st, 'current_job_index', -1)
+            if not (0 <= idx < len(st.queue)):
+                return
+            try:
+                job = st.queue[idx]
+            except Exception:
+                return
+            if not getattr(job, 'use_animation', False):
+                return
+            if not getattr(job, 'rebase_numbering', True):
+                return
+            frame = getattr(scene, 'frame_current', None)
+            if frame is None:
+                return
+            try:
+                _rebase_numbering(job, upto_frame=int(frame))
+            except Exception:
+                pass
+        _on_render_write._rqm_tag = True
+        bpy.app.handlers.render_write.append(_on_render_write)
     _ensure_marker_timer()
 
 def _remove_tagged(hlist):
@@ -261,6 +321,7 @@ def unregister_handlers():
         _remove_tagged(bpy.app.handlers.render_cancel)
         _remove_tagged(bpy.app.handlers.render_init)
         _remove_tagged(bpy.app.handlers.render_stats)
+        _remove_tagged(bpy.app.handlers.render_write)
     except Exception:
         pass
     global _current_render_state
@@ -271,6 +332,7 @@ def unregister_handlers():
         bpy.app.timers.unregister(_marker_timer)
     except Exception:
         pass
+    _rebase_progress.clear()
 
 # ---- Internal helpers ----
 
@@ -564,9 +626,24 @@ def _compute_src_range(job):
     except Exception:
         return int(job.frame_start), int(job.frame_end)
 
-def _rebase_numbering(job):
+def _rebase_numbering(job, upto_frame=None):
     try:
         src_start, src_end = _compute_src_range(job)
+        if src_end < src_start:
+            src_end = src_start
+        if upto_frame is not None:
+            limit = max(src_start, min(int(upto_frame), src_end))
+        else:
+            limit = src_end
+        job_key = None
+        try:
+            job_key = job.as_pointer()
+        except Exception:
+            job_key = None
+        if job_key is not None:
+            last_done = _rebase_progress.get(job_key, src_start - 1)
+            if limit <= last_done:
+                return
         bdir = base_render_dir(job)
         if not os.path.isdir(bdir):
             return
@@ -589,7 +666,7 @@ def _rebase_numbering(job):
                     if not m:
                         continue
                     frame_no = int(m.group('frame'))
-                    if frame_no < src_start or frame_no > src_end:
+                    if frame_no < src_start or frame_no > limit:
                         continue
                     new_index = frame_no - src_start
                     width = len(m.group('frame'))
@@ -610,5 +687,7 @@ def _rebase_numbering(job):
                         pass
             except Exception:
                 pass
+        if job_key is not None:
+            _rebase_progress[job_key] = limit
     except Exception:
         pass

@@ -247,6 +247,14 @@ class RQM_CompOutput(PropertyGroup):
         description='Apply custom encoding settings to this File Output node',
     )
     encoding: PointerProperty(type=RQM_EncodingSettings)
+    file_basename: StringProperty(
+        name='Filename prefix',
+        default='',
+        description=(
+            'Optional filename prefix for files from this File Output node. '
+            'Tokens OK: {scene} {camera} {job} {node}. Leave blank to follow the job settings.'
+        ),
+    )
 
 
 class RQM_RenderStat(PropertyGroup):
@@ -356,7 +364,15 @@ class RQM_Job(PropertyGroup):
     file_basename: StringProperty(
         name='Render filename',
         default='render',
-        description="Prefix for main render files (sanitised). Example: 'beauty' -> beauty0001.png",
+        description=(
+            "Prefix for main render files (sanitised). Example: 'beauty' -> beauty0001.png. "
+            'Leave blank to derive from folders.'
+        ),
+    )
+    prefix_files_with_job_name: BoolProperty(
+        name='Prefix filenames with job name',
+        default=True,
+        description='When enabled, final filenames are prefixed with the job name (Job_render 0001.png)',
     )
     suffix_output_folders_with_job: BoolProperty(
         name='Prefix folders with job name',
@@ -429,6 +445,7 @@ class RQM_State(PropertyGroup):
     running: BoolProperty(default=False)
     current_job_index: IntProperty(default=-1)
     render_in_progress: BoolProperty(default=False)
+    stall_polls: IntProperty(default=0, options={'HIDDEN'})
     job_filter: StringProperty(name='Filter Jobs', default='')
     ui_prev_tab: StringProperty(default='QUEUE', options={'HIDDEN'})
     ui_tab: EnumProperty(
