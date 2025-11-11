@@ -2,12 +2,45 @@
 
 from __future__ import annotations
 
+import os
+
 import bpy  # type: ignore
 from bpy.types import Panel, UIList  # type: ignore
 
+from .comp import base_render_dir, job_file_prefix
+from .properties import get_job_view_layer_names
 from .state import get_state
 
 __all__ = ['RQM_UL_Queue', 'RQM_UL_Outputs', 'RQM_UL_Tags', 'RQM_PT_Panel']
+
+_RENDER_EXTENSIONS = {
+    'PNG': 'png',
+    'JPEG': 'jpg',
+    'JPG': 'jpg',
+    'BMP': 'bmp',
+    'TIFF': 'tiff',
+    'TIF': 'tif',
+    'OPEN_EXR': 'exr',
+    'OPEN_EXR_MULTILAYER': 'exr',
+}
+
+
+def _standard_output_preview(job):
+    try:
+        base_dir = base_render_dir(job)
+        prefix = job_file_prefix(job, base_dir, 'base')
+        fmt = (getattr(job, 'file_format', '') or '').upper()
+        ext = _RENDER_EXTENSIONS.get(fmt, fmt.lower() or 'ext')
+        frame_token = '####' if getattr(job, 'use_animation', False) else '0000'
+        sample_path = os.path.join(base_dir, f'{prefix}{frame_token}.{ext}')
+        if str(getattr(job, 'output_path', '') or '').startswith('//'):
+            try:
+                return bpy.path.relpath(sample_path)
+            except Exception:
+                pass
+        return os.path.normpath(sample_path)
+    except Exception:
+        return ''
 
 
 def _draw_encoding_controls(layout, encoding, file_format):
@@ -191,17 +224,24 @@ class RQM_PT_Panel(Panel):
             if hasattr(job, 'view_layers'):
                 # Cleaner multi-select as a dropdown with dynamic label
                 row = box.row()
+                selected_count = 0
                 try:
-                    sel = getattr(job, 'view_layers', set())
-                    if isinstance(sel, str):
-                        selected = {sel} if sel else set()
-                    else:
-                        selected = set(sel)
+                    selected_names = [name for name in get_job_view_layer_names(job) if name]
+                    selected_count = len(selected_names)
                 except Exception:
-                    selected = set()
+                    selected_names = []
+                if not selected_count:
+                    try:
+                        raw_sel = getattr(job, 'view_layers', set())
+                        if isinstance(raw_sel, str):
+                            selected_count = 1 if raw_sel else 0
+                        else:
+                            selected_count = len({item for item in raw_sel if item})
+                    except Exception:
+                        selected_count = 0
                 label = 'View Layers'
-                if selected:
-                    label = f'View Layers ({len(selected)})'
+                if selected_count:
+                    label = f'View Layers ({selected_count})'
                 # prop_menu_enum opens a dropdown menu where items can be toggled (ENUM_FLAG)
                 row.prop_menu_enum(job, 'view_layers', text=label, icon='DOWNARROW_HLT')
 
@@ -251,7 +291,9 @@ class RQM_PT_Panel(Panel):
             col.label(text='Standard Output', icon='FILE_FOLDER')
             col.prop(job, 'file_format')
             col.prop(job, 'output_path')
-            col.prop(job, 'file_basename')
+            preview = _standard_output_preview(job)
+            if preview:
+                col.label(text=f'Example file: {preview}', icon='FILE')
             enc_box = col.box()
             enc_box.label(text='Encoding', icon='COLOR')
             _draw_encoding_controls(enc_box, getattr(job, 'encoding', None), job.file_format)
