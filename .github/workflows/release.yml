@@ -49,13 +49,13 @@ jobs:
           python-version: "3.11"
 
       - name: Package add-on
-        run: python scripts/package_addon.py
+        run: python scripts/package_extension.py
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
           name: render-queue-manager-package
-          path: render-queue-manager-v*.zip
+          path: render-queue-manager-x*-v*.zip
 
       - name: Determine release metadata
         id: meta
@@ -90,7 +90,7 @@ jobs:
         with:
           tag: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.name }}
-          artifacts: render-queue-manager-v*.zip
+          artifacts: render-queue-manager-x*-v*.zip
           draft: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.draft || false }}
           prerelease: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease || false }}
           allowUpdates: true
