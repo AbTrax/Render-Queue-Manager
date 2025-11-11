@@ -255,6 +255,12 @@ class RQM_CompOutput(PropertyGroup):
             'Tokens OK: {scene} {camera} {job} {node}. Leave blank to follow the job settings.'
         ),
     )
+    last_auto_prefix: StringProperty(
+        name='Last auto prefix',
+        default='',
+        description='Internal: prefix we last pushed onto File Output slots',
+        options={'HIDDEN'},
+    )
 
 
 class RQM_RenderStat(PropertyGroup):

@@ -285,6 +285,8 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
         *fallback_tokens,
         append_tokens=append_tokens,
     )
+    target_core = target_prefix.rstrip()
+    previous_core = (getattr(out, 'last_auto_prefix', '') or '').strip().lower()
     _ensure_min_slot(node, target_prefix)
     default_names = {'image', 'render'}
     try:
@@ -309,6 +311,9 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
                         break
                 if not desired and (norm.endswith('/render') or norm.endswith('/image')):
                     desired = True
+            if not desired and previous_core:
+                if norm.startswith(previous_core):
+                    desired = True
             if not desired:
                 continue
             suffix = ''
@@ -318,10 +323,13 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
                 if not suffix:
                     suffix = f'slot{idx+1}'
             if suffix:
-                prefix_core = target_prefix.rstrip()
-                fs.path = f"{prefix_core}_{suffix} "
+                fs.path = f"{target_core}_{suffix} "
             else:
                 fs.path = target_prefix
+    except Exception:
+        pass
+    try:
+        out.last_auto_prefix = target_core
     except Exception:
         pass
     # Auto-link first unlinked input to Render Layers if possible (helps ensure node writes files)
