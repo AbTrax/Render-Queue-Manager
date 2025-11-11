@@ -7,7 +7,7 @@ import os
 import bpy  # type: ignore
 from bpy.types import Panel, UIList  # type: ignore
 
-from .comp import base_render_dir, job_file_prefix
+from .comp import base_render_dir, job_file_prefix, resolve_base_dir
 from .properties import get_job_view_layer_names
 from .state import get_state
 
@@ -25,20 +25,48 @@ _RENDER_EXTENSIONS = {
 }
 
 
+def _frame_token(job):
+    if getattr(job, 'use_animation', False):
+        if getattr(job, 'rebase_numbering', False) and getattr(job, 'include_source_frame_number', True):
+            return '####-####'
+        return '####'
+    return '0000'
+
+
 def _standard_output_preview(job):
     try:
         base_dir = base_render_dir(job)
         prefix = job_file_prefix(job, base_dir, 'base')
         fmt = (getattr(job, 'file_format', '') or '').upper()
         ext = _RENDER_EXTENSIONS.get(fmt, fmt.lower() or 'ext')
-        if getattr(job, 'use_animation', False):
-            frame_token = '####'
-            if getattr(job, 'rebase_numbering', False) and getattr(job, 'include_source_frame_number', True):
-                frame_token = '####-####'
-        else:
-            frame_token = '0000'
+        frame_token = _frame_token(job)
         sample_path = os.path.join(base_dir, f'{prefix}{frame_token}.{ext}')
         if str(getattr(job, 'output_path', '') or '').startswith('//'):
+            try:
+                return bpy.path.relpath(sample_path)
+            except Exception:
+                pass
+        return os.path.normpath(sample_path)
+    except Exception:
+        return ''
+
+
+def _compositor_output_preview(job, out, scn):
+    if not out:
+        return ''
+    try:
+        node_name = getattr(out, 'node_name', '') or 'File Output'
+        base_dir, err = resolve_base_dir(scn, job, out, node_name)
+        if err or not base_dir:
+            return ''
+        raw_base = base_dir
+        abs_base = bpy.path.abspath(base_dir or '//')
+        prefix = job_file_prefix(job, abs_base, 'comp', append_tokens=(node_name,))
+        fmt = (getattr(job, 'file_format', '') or '').upper()
+        ext = _RENDER_EXTENSIONS.get(fmt, fmt.lower() or 'ext')
+        frame_token = _frame_token(job)
+        sample_path = os.path.join(abs_base, f'{prefix}{frame_token}.{ext}')
+        if str(raw_base).startswith('//'):
             try:
                 return bpy.path.relpath(sample_path)
             except Exception:
@@ -384,7 +412,8 @@ class RQM_PT_Panel(Panel):
                     sub.prop(out, 'use_node_named_subfolder')
                     sub.prop(out, 'extra_subfolder')
                     sub.prop(out, 'ensure_dirs')
-                    if hasattr(out, 'file_basename'):
-                        sub.prop(out, 'file_basename', text='Filename prefix')
+                    preview = _compositor_output_preview(job, out, scn_for_job)
+                    if preview:
+                        sub.label(text=f'Example file: {preview}', icon='FILE')
 
         _draw_queue_controls(layout, st)

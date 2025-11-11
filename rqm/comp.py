@@ -111,10 +111,31 @@ def _derive_subfolder_tokens(job: RQM_Job, base_dir: str, *fallback_tokens: str)
     return ['output']
 
 
-def job_file_prefix(job: RQM_Job, base_dir: str, *fallback_tokens: str, override_token: str | None = None) -> str:
+def job_file_prefix(
+    job: RQM_Job,
+    base_dir: str,
+    *fallback_tokens: str,
+    override_token: str | None = None,
+    append_tokens: tuple[str, ...] | None = None,
+) -> str:
     """Build the filename prefix `<job>_<subfolders> ` for render and compositor outputs."""
+    append_tokens = append_tokens or ()
     safe_job = _sanitize_component(job.name or 'job')
     include_job_name = getattr(job, 'prefix_files_with_job_name', True)
+
+    def _normalize(token: str) -> str:
+        cleaned = _sanitize_component(token or '')
+        cleaned = cleaned.replace(' ', '_').strip('_')
+        return cleaned
+
+    def _push(seq: list[str], token: str) -> None:
+        cleaned = _normalize(token)
+        if not cleaned:
+            return
+        if seq and seq[-1].lower() == cleaned.lower():
+            return
+        seq.append(cleaned)
+
     if override_token:
         cleaned_override = _sanitize_component(override_token)
         sub_tokens = [cleaned_override] if cleaned_override else []
@@ -124,20 +145,24 @@ def job_file_prefix(job: RQM_Job, base_dir: str, *fallback_tokens: str, override
             sub_tokens = [file_base]
         else:
             sub_tokens = _derive_subfolder_tokens(job, base_dir, *fallback_tokens)
-    safe_tail = '_'.join(_sanitize_component(tok).replace(' ', '_') for tok in sub_tokens if tok)
+
+    tail_parts = [_normalize(tok) for tok in sub_tokens if _normalize(tok)]
+    safe_tail = '_'.join(tail_parts)
+    components: list[str] = []
     if include_job_name:
-        if not safe_tail or safe_tail.lower() == safe_job.lower():
-            prefix = safe_job
-        else:
-            prefix = f'{safe_job}_{safe_tail}'
-    else:
-        prefix = safe_tail or safe_job
-    prefix = prefix.strip()
-    if not prefix:
-        prefix = safe_job
-    if not prefix.endswith(' '):
-        prefix = prefix + ' '
-    return prefix
+        _push(components, safe_job)
+    if safe_tail:
+        _push(components, safe_tail)
+    if not components:
+        _push(components, safe_job)
+    for extra in append_tokens:
+        _push(components, extra)
+    prefix_core = '_'.join(components).strip('_ ')
+    if not prefix_core:
+        prefix_core = _normalize(safe_job) or 'job'
+    if not prefix_core.endswith(' '):
+        prefix_core = f'{prefix_core} '
+    return prefix_core
 
 def job_root_dir(job: RQM_Job) -> str:
     root = bpy.path.abspath(job.output_path)
@@ -252,13 +277,14 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
     fallback_tokens = [tok for tok in (extra_hint, node_hint) if tok]
     if not fallback_tokens:
         fallback_tokens.append('comp')
-    override_token = None
-    if getattr(out, 'file_basename', '').strip():
-        raw_name = _tokens(out.file_basename, scn, job.name, job.camera_name, node_name=node.name).strip()
-        cleaned = _sanitize_component(raw_name)
-        if cleaned:
-            override_token = cleaned
-    target_prefix = job_file_prefix(job, base_dir, *fallback_tokens, override_token=override_token)
+    node_token = node.name or ''
+    append_tokens: tuple[str, ...] = tuple(tok for tok in (node_token,) if tok)
+    target_prefix = job_file_prefix(
+        job,
+        base_dir,
+        *fallback_tokens,
+        append_tokens=append_tokens,
+    )
     _ensure_min_slot(node, target_prefix)
     default_names = {'image', 'render'}
     try:
@@ -271,9 +297,7 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
             desired = False
             path_clean = (getattr(fs, 'path', '') or '').strip().replace('\\', '/').rstrip('/')
             norm = path_clean.lower()
-            if override_token:
-                desired = True
-            elif not norm:
+            if not norm:
                 desired = True
             else:
                 for base in default_names:

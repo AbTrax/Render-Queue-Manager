@@ -497,8 +497,17 @@ def _stereo_rename(job):
                     for p in parts:
                         if not dedup or dedup[-1].lower() != p.lower():
                             dedup.append(p)
-                    clean_base = '_'.join(dedup)
-                    new_name = f"{clean_base}_{view_token} {frame}{ext_full}"
+                    tokens = [p for p in dedup if p]
+                    view_part = (view_token or '').strip('_ ')
+                    if view_part:
+                        view_lower = view_part.lower()
+                        tokens = [p for p in tokens if p.lower() != view_lower]
+                        insert_idx = 1 if tokens else 0
+                        tokens.insert(insert_idx, view_part)
+                    clean_base = '_'.join(tokens) if tokens else (view_part or '')
+                    if not clean_base:
+                        clean_base = view_part or 'view'
+                    new_name = f"{clean_base} {frame}{ext_full}"
                     if new_name != name:
                         new_path = os.path.join(root, new_name)
                         try:
