@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "render_queue_manager_x"
-version = "1.15.0"
+version = "1.15.1"
 type = "add-on"
 
 name = "Render Queue Manager X"
