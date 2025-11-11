@@ -1,6 +1,6 @@
 """Render Queue Manager X - Blender extension entry point."""
 
-__version__ = "1.14.2"
+__version__ = "1.15.0"
 
 # --- Hot reload support ---
 import importlib, sys
