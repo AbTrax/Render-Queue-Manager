@@ -31,7 +31,12 @@ def _standard_output_preview(job):
         prefix = job_file_prefix(job, base_dir, 'base')
         fmt = (getattr(job, 'file_format', '') or '').upper()
         ext = _RENDER_EXTENSIONS.get(fmt, fmt.lower() or 'ext')
-        frame_token = '####' if getattr(job, 'use_animation', False) else '0000'
+        if getattr(job, 'use_animation', False):
+            frame_token = '####'
+            if getattr(job, 'rebase_numbering', False) and getattr(job, 'include_source_frame_number', True):
+                frame_token = '####-####'
+        else:
+            frame_token = '0000'
         sample_path = os.path.join(base_dir, f'{prefix}{frame_token}.{ext}')
         if str(getattr(job, 'output_path', '') or '').startswith('//'):
             try:
@@ -305,6 +310,8 @@ class RQM_PT_Panel(Panel):
                 col.prop(job, 'suffix_output_folders_with_job')
             if job.use_animation and hasattr(job, 'rebase_numbering'):
                 col.prop(job, 'rebase_numbering')
+                if getattr(job, 'rebase_numbering', False) and hasattr(job, 'include_source_frame_number'):
+                    col.prop(job, 'include_source_frame_number')
 
             col.separator()
             col.label(text='Stereoscopy', icon='CAMERA_STEREO')

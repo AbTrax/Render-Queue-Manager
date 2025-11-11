@@ -387,6 +387,14 @@ class RQM_Job(PropertyGroup):
             'for this job, regardless of timeline frame indices'
         ),
     )
+    include_source_frame_number: BoolProperty(
+        name='Include source frame number',
+        default=True,
+        description=(
+            'When rebasing animation numbering, prefix the rebased value with the '
+            'original timeline frame (e.g. 0100-0000). Helps when resuming or fixing frames.'
+        ),
+    )
     encoding: PointerProperty(type=RQM_EncodingSettings)
 
     use_comp_outputs: BoolProperty(name='Use Compositor outputs', default=False)

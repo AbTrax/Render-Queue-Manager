@@ -280,6 +280,7 @@ class RQM_OT_DuplicateJob(Operator):
             'prefix_files_with_job_name',
             'suffix_output_folders_with_job',
             'rebase_numbering',
+            'include_source_frame_number',
             'use_comp_outputs',
             'comp_outputs_non_blocking',
             'use_stereoscopy',

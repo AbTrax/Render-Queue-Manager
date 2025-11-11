@@ -296,7 +296,8 @@ def register_handlers():
             if frame is None:
                 return
             try:
-                _rebase_numbering(job, upto_frame=int(frame))
+                frame_val = int(frame)
+                _rebase_numbering(job, upto_frame=frame_val, focus_frame=frame_val)
             except Exception:
                 pass
         _on_render_write._rqm_tag = True
@@ -354,7 +355,9 @@ _view_pat_variants = [
 _plain_frame_pat = re.compile(r'^(?P<base>.+?)(?P<frame>\d{3,})(?P<ext>\.[^.]+)$')
 _dup_token_sep = re.compile(r'[_\.]+')
 _num_before_suffix_pat = re.compile(r'^(?P<base>.+?)(?P<frame>\d{3,})(?P<tag>_[A-Za-z0-9]+)(?P<ext>\.[^.]+)$')
-_any_frame_pat = re.compile(r'^(?P<prefix>.+?)(?P<tag>_[A-Za-z0-9]+)?\s+(?P<frame>\d{3,})(?P<ext>\.[^.]+)$')
+_any_frame_pat = re.compile(
+    r'^(?P<prefix>.+?)(?P<tag>_[A-Za-z0-9]+)?\s+(?:(?P<src>\d{3,})[-_])?(?P<frame>\d{3,})(?P<ext>\.[^.]+)$'
+)
 
 def _parse_extra_tags(raw: str):
     tags = []
@@ -626,7 +629,7 @@ def _compute_src_range(job):
     except Exception:
         return int(job.frame_start), int(job.frame_end)
 
-def _rebase_numbering(job, upto_frame=None):
+def _rebase_numbering(job, upto_frame=None, focus_frame=None):
     try:
         src_start, src_end = _compute_src_range(job)
         if src_end < src_start:
@@ -640,10 +643,21 @@ def _rebase_numbering(job, upto_frame=None):
             job_key = job.as_pointer()
         except Exception:
             job_key = None
-        if job_key is not None:
-            last_done = _rebase_progress.get(job_key, src_start - 1)
-            if limit <= last_done:
-                return
+        last_done = _rebase_progress.get(job_key, src_start - 1) if job_key is not None else src_start - 1
+        target_frames: set[int] = set()
+        if focus_frame is not None:
+            try:
+                focus_val = int(focus_frame)
+                focus_val = max(src_start, min(focus_val, src_end))
+                if focus_val <= last_done:
+                    target_frames.add(focus_val)
+                else:
+                    limit = max(limit, focus_val)
+            except Exception:
+                pass
+        if not target_frames and limit <= last_done:
+            return
+        include_source = getattr(job, 'include_source_frame_number', True)
         bdir = base_render_dir(job)
         if not os.path.isdir(bdir):
             return
@@ -658,23 +672,47 @@ def _rebase_numbering(job, upto_frame=None):
                         search_roots.append(p)
             except Exception:
                 pass
-        # Go through files that end with ' <frame>.ext' (with optional _TAG)
+        processed_high = last_done
         for root in search_roots:
             try:
                 for fname in os.listdir(root):
                     m = _any_frame_pat.match(fname)
                     if not m:
                         continue
-                    frame_no = int(m.group('frame'))
-                    if frame_no < src_start or frame_no > limit:
+                    raw_frame = int(m.group('frame'))
+                    src_component = m.group('src')
+                    if src_component:
+                        source_frame = int(src_component)
+                        local_index = raw_frame
+                    else:
+                        source_frame = raw_frame
+                        local_index = source_frame - src_start
+                    if source_frame < src_start or source_frame > src_end:
                         continue
-                    new_index = frame_no - src_start
-                    width = len(m.group('frame'))
-                    new_frame_str = str(new_index).zfill(width)
+                    if target_frames:
+                        if source_frame not in target_frames:
+                            continue
+                    else:
+                        if source_frame > limit or source_frame <= last_done:
+                            continue
+                    if local_index < 0:
+                        local_index = source_frame - src_start
+                    local_index = max(0, local_index)
+                    local_width = max(len(m.group('frame')), len(str(local_index)))
+                    new_local = str(local_index).zfill(local_width)
                     prefix = m.group('prefix')
                     tag = m.group('tag') or ''
                     ext = m.group('ext')
-                    new_name = f"{prefix}{tag} {new_frame_str}{ext}"
+                    if not target_frames:
+                        processed_high = max(processed_high, source_frame)
+                    if include_source:
+                        src_width_hint = len(src_component) if src_component else 0
+                        src_width = max(src_width_hint, len(str(source_frame)))
+                        src_label = str(source_frame).zfill(src_width)
+                        frame_token = f"{src_label}-{new_local}"
+                    else:
+                        frame_token = new_local
+                    new_name = f"{prefix}{tag} {frame_token}{ext}"
                     if new_name == fname:
                         continue
                     src_path = os.path.join(root, fname)
@@ -687,7 +725,7 @@ def _rebase_numbering(job, upto_frame=None):
                         pass
             except Exception:
                 pass
-        if job_key is not None:
-            _rebase_progress[job_key] = limit
+        if job_key is not None and not target_frames and processed_high > last_done:
+            _rebase_progress[job_key] = processed_high
     except Exception:
         pass
