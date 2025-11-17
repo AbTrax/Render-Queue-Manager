@@ -286,15 +286,31 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
         append_tokens=append_tokens,
     )
     target_core = target_prefix.rstrip()
-    previous_core = (getattr(out, 'last_auto_prefix', '') or '').strip().lower()
+    previous_core_value = (getattr(out, 'last_auto_prefix', '') or '').strip()
+    previous_core = previous_core_value.lower()
     _ensure_min_slot(node, target_prefix)
     default_names = {'image', 'render'}
     try:
         slots = list(node.file_slots)
     except Exception:
         slots = []
+    updated_slots = 0
     try:
         slot_total = len(slots)
+        def _apply_slot_prefix(fs, idx):
+            nonlocal updated_slots
+            suffix = ''
+            if slot_total > 1:
+                label = getattr(fs, 'name', '') or getattr(fs, 'path', '')
+                suffix = _sanitize_component(label)
+                if not suffix:
+                    suffix = f'slot{idx+1}'
+            if suffix:
+                fs.path = f"{target_core}_{suffix} "
+            else:
+                fs.path = target_prefix
+            updated_slots += 1
+
         for idx, fs in enumerate(slots):
             desired = False
             path_clean = (getattr(fs, 'path', '') or '').strip().replace('\\', '/').rstrip('/')
@@ -316,22 +332,17 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
                     desired = True
             if not desired:
                 continue
-            suffix = ''
-            if slot_total > 1:
-                label = getattr(fs, 'name', '') or getattr(fs, 'path', '')
-                suffix = _sanitize_component(label)
-                if not suffix:
-                    suffix = f'slot{idx+1}'
-            if suffix:
-                fs.path = f"{target_core}_{suffix} "
-            else:
-                fs.path = target_prefix
+            _apply_slot_prefix(fs, idx)
+        if updated_slots == 0 and not previous_core_value:
+            for idx, fs in enumerate(slots):
+                _apply_slot_prefix(fs, idx)
     except Exception:
         pass
-    try:
-        out.last_auto_prefix = target_core
-    except Exception:
-        pass
+    if updated_slots:
+        try:
+            out.last_auto_prefix = target_core
+        except Exception:
+            pass
     # Auto-link first unlinked input to Render Layers if possible (helps ensure node writes files)
     try:
         nt = scn.node_tree

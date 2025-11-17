@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - Converted the project to Blender's Extensions packaging, replacing `bl_info` with `blender_manifest.toml` and updated build tooling to match.
 
+### Fixed
+
+- Compositor File Output slot names are now updated even when the node already used custom paths, ensuring rendered file names match the example shown in the UI.
+
 ## [1.14.1] - 2025-10-11
 
 ### Changed
