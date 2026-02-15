@@ -133,6 +133,13 @@ class RQM_PT_Panel(Panel):
             rr.prop(job, 'res_x')
             rr.prop(job, 'res_y')
             rr.prop(job, 'percent')
+            col.prop(job, 'use_margin')
+            if getattr(job, 'use_margin', False):
+                mr = col.row(align=True)
+                mr.prop(job, 'margin_pixels')
+                eff_x = job.res_x + (job.margin_pixels * 2)
+                eff_y = job.res_y + (job.margin_pixels * 2)
+                mr.label(text=f'= {eff_x} × {eff_y}')
 
             col.separator()
             col.prop(job, 'use_animation')
@@ -297,5 +304,21 @@ class RQM_PT_Panel(Panel):
             indirect_box.operator(
                 'rqm.toggle_indirect_only',
                 text='Disable Indirect-Only',
+                icon='RESTRICT_RENDER_ON',
+            )
+
+        # --- All Layers toggle ---
+        indirect_box.separator()
+        has_all_disabled = bool(getattr(st, 'indirect_all_disabled_collections', ''))
+        if has_all_disabled:
+            indirect_box.operator(
+                'rqm.toggle_indirect_only_all',
+                text='Restore All Layers',
+                icon='RESTRICT_RENDER_OFF',
+            )
+        else:
+            indirect_box.operator(
+                'rqm.toggle_indirect_only_all',
+                text='Disable All Layers',
                 icon='RESTRICT_RENDER_ON',
             )

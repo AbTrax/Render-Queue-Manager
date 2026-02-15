@@ -77,6 +77,11 @@ def apply_job(job: RQM_Job):
     scn.render.resolution_x = job.res_x
     scn.render.resolution_y = job.res_y
     scn.render.resolution_percentage = job.percent
+    # Overscan margin: add extra pixels on each side for compositing
+    if getattr(job, 'use_margin', False) and getattr(job, 'margin_pixels', 0) > 0:
+        m = job.margin_pixels
+        scn.render.resolution_x = job.res_x + (m * 2)
+        scn.render.resolution_y = job.res_y + (m * 2)
     # Stereoscopy (multiview) handling
     try:
         if getattr(job, 'use_stereoscopy', False):

@@ -145,6 +145,19 @@ class RQM_Job(PropertyGroup):
     res_y: IntProperty(name='Height', default=1080, min=4)
     percent: IntProperty(name='Scale %', default=100, min=1, max=100)
 
+    use_margin: BoolProperty(
+        name='Overscan Margin',
+        default=False,
+        description='Add extra pixels around the render for compositing (motion blur, distortion, etc.)',
+    )
+    margin_pixels: IntProperty(
+        name='Margin (px)',
+        default=0,
+        min=0,
+        max=2000,
+        description='Number of extra pixels to add on each side of the render',
+    )
+
     use_persistent_data: BoolProperty(
         name='Persistent Data',
         default=False,
@@ -271,6 +284,12 @@ class RQM_State(PropertyGroup):
         name='Indirect-disabled collections',
         default='',
         description='Internal: tracks which collections were excluded by the indirect-only toggle',
+        options={'HIDDEN'},
+    )
+    indirect_all_disabled_collections: StringProperty(
+        name='Indirect-disabled all layers',
+        default='',
+        description='Internal: tracks collections excluded across all view layers by the toggle-all',
         options={'HIDDEN'},
     )
 

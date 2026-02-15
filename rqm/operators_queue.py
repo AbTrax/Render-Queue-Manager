@@ -598,3 +598,77 @@ class RQM_OT_ToggleIndirectOnly(Operator):
             st.indirect_disabled_collections = ';'.join(disabled_names)
             self.report({'INFO'}, f'Excluded {len(disabled_names)} indirect-only collection(s) in "{vl.name}".')
         return {'FINISHED'}
+
+
+class RQM_OT_ToggleIndirectOnlyAll(Operator):
+    bl_idname = 'rqm.toggle_indirect_only_all'
+    bl_label = 'Toggle Indirect-Only (All Layers)'
+    bl_description = (
+        'Exclude (or restore) collections marked as Indirect Only across ALL view layers at once'
+    )
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @staticmethod
+    def _walk_layer_collections(root):
+        for child in root.children:
+            yield child
+            yield from RQM_OT_ToggleIndirectOnlyAll._walk_layer_collections(child)
+
+    def execute(self, context):
+        st = get_state(context)
+        if st is None:
+            self.report({'ERROR'}, 'Add-on not initialized.')
+            return {'CANCELLED'}
+        if not context.scene or not context.scene.view_layers:
+            self.report({'ERROR'}, 'No view layers in scene.')
+            return {'CANCELLED'}
+
+        previously_disabled = getattr(st, 'indirect_all_disabled_collections', '')
+
+        if previously_disabled:
+            # --- Restore mode ---
+            # Format: "vl_name:col1,col2;vl_name2:col3,col4"
+            total_restored = 0
+            for entry in previously_disabled.split(';'):
+                if ':' not in entry:
+                    continue
+                vl_name, col_str = entry.split(':', 1)
+                vl = context.scene.view_layers.get(vl_name)
+                if not vl:
+                    continue
+                col_names = set(n for n in col_str.split(',') if n)
+                for lc in self._walk_layer_collections(vl.layer_collection):
+                    if lc.name in col_names and lc.exclude:
+                        lc.exclude = False
+                        total_restored += 1
+            st.indirect_all_disabled_collections = ''
+            self.report(
+                {'INFO'},
+                f'Restored {total_restored} indirect-only collection(s) across all view layers.',
+            )
+        else:
+            # --- Disable mode ---
+            entries = []
+            total_disabled = 0
+            for vl in context.scene.view_layers:
+                disabled_names = []
+                for lc in self._walk_layer_collections(vl.layer_collection):
+                    try:
+                        if getattr(lc, 'indirect_only', False) and not lc.exclude:
+                            lc.exclude = True
+                            disabled_names.append(lc.name)
+                    except Exception:
+                        pass
+                if disabled_names:
+                    entries.append(f'{vl.name}:{",".join(disabled_names)}')
+                    total_disabled += len(disabled_names)
+            if not entries:
+                self.report({'INFO'}, 'No indirect-only collections found in any view layer.')
+                return {'FINISHED'}
+            st.indirect_all_disabled_collections = ';'.join(entries)
+            layers_count = len(entries)
+            self.report(
+                {'INFO'},
+                f'Excluded {total_disabled} indirect-only collection(s) across {layers_count} view layer(s).',
+            )
+        return {'FINISHED'}
