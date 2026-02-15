@@ -262,3 +262,10 @@ class RQM_State(PropertyGroup):
     current_job_index: IntProperty(default=-1)
     render_in_progress: BoolProperty(default=False)
     job_filter: StringProperty(name='Filter Jobs', default='')
+    indirect_disabled_collections: StringProperty(
+        name='Indirect-disabled collections',
+        default='',
+        description='Internal: tracks which collections were excluded by the indirect-only toggle',
+        options={'HIDDEN'},
+    )
+

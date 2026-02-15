@@ -8,11 +8,12 @@ import bpy  # type: ignore
 from bpy.props import EnumProperty, IntProperty  # type: ignore
 from bpy.types import Operator  # type: ignore
 
+from .comp import base_render_dir, comp_root_dir, resolve_base_dir
 from .handlers import register_handlers
 from .jobs import apply_job
 from .properties import RQM_Job
 from .state import get_state
-from .utils import _sanitize_component, view_layer_identifier_map
+from .utils import _ensure_dir, _sanitize_component, view_layer_identifier_map
 
 
 # ---- Local item callbacks (avoid lambda for Blender EnumProperty) ----
@@ -86,7 +87,76 @@ __all__ = [
     'RQM_OT_StartQueue',
     'RQM_OT_StopQueue',
     'RQM_OT_DuplicateJob',
+    'RQM_OT_CreateFolders',
+    'RQM_OT_ToggleIndirectOnly',
 ]
+
+
+class RQM_OT_CreateFolders(Operator):
+    bl_idname = 'rqm.create_folders'
+    bl_label = 'Create Folders'
+    bl_description = 'Pre-create the output directory structure for all enabled jobs in the queue'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        st = get_state(context)
+        if st is None or not st.queue:
+            self.report({'WARNING'}, 'No jobs in the queue.')
+            return {'CANCELLED'}
+        jobs_processed = 0
+        dirs_created = 0
+        errors = []
+        for job in st.queue:
+            if not job.enabled:
+                continue
+            jobs_processed += 1
+            # Base render directory
+            try:
+                bdir = base_render_dir(job)
+                ok, err = _ensure_dir(bdir)
+                if ok:
+                    dirs_created += 1
+                elif err:
+                    errors.append(f"{job.name}: {err}")
+            except Exception as e:
+                errors.append(f"{job.name} (base): {e}")
+            # Compositor root directory
+            try:
+                cdir = comp_root_dir(job)
+                ok, err = _ensure_dir(cdir)
+                if ok:
+                    dirs_created += 1
+                elif err:
+                    errors.append(f"{job.name} (comp root): {err}")
+            except Exception as e:
+                errors.append(f"{job.name} (comp root): {e}")
+            # Compositor File Output node directories
+            if job.use_comp_outputs and len(job.comp_outputs) > 0:
+                scn = bpy.data.scenes.get(job.scene_name)
+                for out in job.comp_outputs:
+                    if not out.enabled:
+                        continue
+                    try:
+                        node_name = out.node_name or 'Composite'
+                        out_dir, err = resolve_base_dir(scn, job, out, node_name)
+                        if err:
+                            errors.append(f"{job.name}/{node_name}: {err}")
+                            continue
+                        out_dir = bpy.path.abspath(out_dir or '//')
+                        ok, err = _ensure_dir(out_dir)
+                        if ok:
+                            dirs_created += 1
+                        elif err:
+                            errors.append(f"{job.name}/{node_name}: {err}")
+                    except Exception as e:
+                        errors.append(f"{job.name} (comp output): {e}")
+        if errors:
+            for e in errors:
+                print(f'[RQM] Create Folders error: {e}')
+            self.report({'WARNING'}, f'Created folders for {jobs_processed} jobs ({dirs_created} dirs) with {len(errors)} error(s). See console.')
+        else:
+            self.report({'INFO'}, f'Created folders for {jobs_processed} job(s) ({dirs_created} directories).')
+        return {'FINISHED'}
 
 
 class RQM_OT_AddFromCurrent(Operator):
@@ -452,4 +522,61 @@ class RQM_OT_StopQueue(Operator):
         st.current_job_index = -1
         st.render_in_progress = False
         self.report({'INFO'}, 'Queue stopped.')
+        return {'FINISHED'}
+
+
+class RQM_OT_ToggleIndirectOnly(Operator):
+    bl_idname = 'rqm.toggle_indirect_only'
+    bl_label = 'Toggle Indirect-Only'
+    bl_description = (
+        'Exclude (or restore) collections marked as Indirect Only in the active view layer. '
+        'Useful when switching between Cycles and Eevee'
+    )
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @staticmethod
+    def _walk_layer_collections(root):
+        """Recursively yield all LayerCollections under *root*."""
+        for child in root.children:
+            yield child
+            yield from RQM_OT_ToggleIndirectOnly._walk_layer_collections(child)
+
+    def execute(self, context):
+        st = get_state(context)
+        if st is None:
+            self.report({'ERROR'}, 'Add-on not initialized.')
+            return {'CANCELLED'}
+        vl = context.view_layer
+        if not vl:
+            self.report({'ERROR'}, 'No active view layer.')
+            return {'CANCELLED'}
+
+        previously_disabled = set(
+            n for n in st.indirect_disabled_collections.split(';') if n
+        )
+
+        if previously_disabled:
+            # --- Restore mode ---
+            restored = 0
+            for lc in self._walk_layer_collections(vl.layer_collection):
+                if lc.name in previously_disabled and lc.exclude:
+                    lc.exclude = False
+                    restored += 1
+            st.indirect_disabled_collections = ''
+            self.report({'INFO'}, f'Restored {restored} indirect-only collection(s).')
+        else:
+            # --- Disable mode ---
+            disabled_names = []
+            for lc in self._walk_layer_collections(vl.layer_collection):
+                try:
+                    if getattr(lc, 'indirect_only', False) and not lc.exclude:
+                        lc.exclude = True
+                        disabled_names.append(lc.name)
+                except Exception:
+                    pass
+            if not disabled_names:
+                self.report({'INFO'}, 'No indirect-only collections found in this view layer.')
+                return {'FINISHED'}
+            st.indirect_disabled_collections = ';'.join(disabled_names)
+            self.report({'INFO'}, f'Excluded {len(disabled_names)} indirect-only collection(s).')
         return {'FINISHED'}

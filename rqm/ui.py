@@ -234,6 +234,7 @@ class RQM_PT_Panel(Panel):
         controls = layout.row(align=True)
         if not st.running:
             controls.operator('rqm.start_queue', icon='RENDER_ANIMATION')
+            controls.operator('rqm.create_folders', icon='FILE_FOLDER')
         else:
             controls.operator('rqm.stop_queue', icon='CANCEL')
         if st.running and st.current_job_index >= 0 and len(st.queue) > 0:
@@ -242,3 +243,19 @@ class RQM_PT_Panel(Panel):
             layout.label(text=f'Running. Job {display_idx}/{total}')
         else:
             layout.label(text='Idle')
+
+        layout.separator()
+        indirect_row = layout.row(align=True)
+        has_disabled = bool(getattr(st, 'indirect_disabled_collections', ''))
+        if has_disabled:
+            indirect_row.operator(
+                'rqm.toggle_indirect_only',
+                text='Restore Indirect-Only',
+                icon='RESTRICT_RENDER_OFF',
+            )
+        else:
+            indirect_row.operator(
+                'rqm.toggle_indirect_only',
+                text='Disable Indirect-Only',
+                icon='RESTRICT_RENDER_ON',
+            )

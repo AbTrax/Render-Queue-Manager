@@ -14,6 +14,96 @@ __all__ = [
 ]
 
 
+# ---- Blender 5 compatibility helpers ----
+
+def _is_blender5() -> bool:
+    """Return True when running on Blender 5.0 or newer."""
+    try:
+        return bpy.app.version >= (5, 0, 0)
+    except Exception:
+        return False
+
+
+def _set_node_base_path(node, path: str):
+    """Set the output directory on a File Output node (B5+ uses *directory*)."""
+    if _is_blender5() and hasattr(node, 'directory'):
+        node.directory = path
+    else:
+        node.base_path = path
+
+
+def _get_node_slots(node):
+    """Return the iterable of output slots (file_output_items on B5+, file_slots otherwise)."""
+    if _is_blender5() and hasattr(node, 'file_output_items'):
+        return node.file_output_items
+    return node.file_slots
+
+
+def _node_slot_count(node) -> int:
+    """Return number of output slots on the node."""
+    try:
+        return len(_get_node_slots(node))
+    except Exception:
+        return 0
+
+
+def _new_node_slot(node, name: str):
+    """Add a new output slot to the File Output node."""
+    if _is_blender5() and hasattr(node, 'file_output_items'):
+        return node.file_output_items.new('RGBA', name)
+    return node.file_slots.new(name)
+
+
+def _get_slot_path(slot) -> str:
+    """Read the sub-path / name from a slot (works on both old and new API)."""
+    # B5 file_output_items have .name; old file_slots have .path
+    if hasattr(slot, 'path'):
+        return slot.path or ''
+    if hasattr(slot, 'name'):
+        return slot.name or ''
+    return ''
+
+
+def _set_slot_path(slot, value: str):
+    """Write the sub-path / name on a slot."""
+    if hasattr(slot, 'path'):
+        slot.path = value
+    elif hasattr(slot, 'name'):
+        slot.name = value
+
+
+def _set_node_format(node, fmt: str):
+    """Set the file format on the node (handles both old and new API)."""
+    safe_fmt = _valid_node_format(fmt or 'PNG')
+    # B5+: try per-item format first, then fall back to node.format
+    if _is_blender5():
+        try:
+            slots = _get_node_slots(node)
+            for item in slots:
+                if hasattr(item, 'format'):
+                    item.format.file_format = safe_fmt
+        except Exception:
+            pass
+    # B3/B4: node.format.file_format
+    if hasattr(node, 'format'):
+        try:
+            node.format.file_format = safe_fmt
+        except Exception:
+            pass
+
+
+def _enable_compositor(scn):
+    """Ensure the scene's compositor / nodes are enabled (B5-safe)."""
+    try:
+        if hasattr(scn, 'use_nodes'):
+            if not scn.use_nodes:
+                scn.use_nodes = True
+    except Exception:
+        pass
+
+
+# ---- Directory helpers ----
+
 def _append_job_suffix(folder: str, job: RQM_Job) -> str:
     if not getattr(job, 'suffix_output_folders_with_job', False):
         return folder
@@ -49,8 +139,7 @@ def comp_root_dir(job: RQM_Job) -> str:
 def get_file_output_node(scn, out: RQM_CompOutput):
     if not scn:
         return None, 'No scene.'
-    if not scn.use_nodes:
-        scn.use_nodes = True
+    _enable_compositor(scn)
     nt = scn.node_tree
     if not nt:
         return None, 'Scene has no node tree.'
@@ -95,8 +184,8 @@ def resolve_base_dir(scn, job: RQM_Job, out: RQM_CompOutput, node_name: str):
     return base_dir, None
 
 def _ensure_min_slot(node, fallback_name: str):
-    if len(node.file_slots) == 0:
-        node.file_slots.new(fallback_name or 'render')
+    if _node_slot_count(node) == 0:
+        _new_node_slot(node, fallback_name or 'render')
 
 def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
     node, err = get_file_output_node(scn, out)
@@ -107,18 +196,15 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
         return False, err
     base_dir = bpy.path.abspath(base_dir or '//')
     try:
-        node.base_path = base_dir
+        _set_node_base_path(node, base_dir)
     except Exception as e:
         return False, f"Couldn't set File Output base path: {e}".strip()
     if out.ensure_dirs:
         ok, e2 = _ensure_dir(base_dir)
         if not ok:
             return False, f"Couldn't create folder '{base_dir}': {e2}".strip()
-    if out.override_node_format and hasattr(node, 'format'):
-        try:
-            node.format.file_format = _valid_node_format(job.file_format or 'PNG')
-        except Exception:
-            pass
+    if out.override_node_format:
+        _set_node_format(node, job.file_format or 'PNG')
     safe_job = _sanitize_component(job.name or 'job')
     safe_base = _sanitize_component(job.file_basename or 'render')
     # Avoid duplicate job name if basename already starts with it
@@ -132,9 +218,10 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
     _ensure_min_slot(node, target_prefix)
     # Only override default/empty slot names ('', 'image', 'render') to avoid clobbering user custom slot paths
     try:
-        for fs in node.file_slots:
-            if not fs.path or fs.path.lower() in {'image','render'}:
-                fs.path = target_prefix
+        for fs in _get_node_slots(node):
+            sp = _get_slot_path(fs)
+            if not sp or sp.lower() in {'image', 'render'}:
+                _set_slot_path(fs, target_prefix)
             # If user custom path lacks trailing space, optionally keep as-is (don't force)
     except Exception:
         pass
@@ -154,8 +241,8 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
         pass
     print(f"[RQM] Compositor node '{node.name}' -> {base_dir}")
     try:
-        for fs in node.file_slots:
-            print(f"[RQM]   slot '{fs.path}'")
+        for fs in _get_node_slots(node):
+            print(f"[RQM]   slot '{_get_slot_path(fs)}'")
     except Exception:
         pass
     return True, 'OK'
