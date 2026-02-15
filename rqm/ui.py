@@ -179,7 +179,7 @@ class RQM_PT_Panel(Panel):
             if job.use_animation and hasattr(job, 'rebase_numbering'):
                 col.prop(job, 'rebase_numbering')
 
-            col.separator()
+            # --- Stereoscopy ---
             stereo_box = box.box()
             stereo_box.label(text='Stereoscopy / Multi-View', icon='CAMERA_STEREO')
             stereo_box.prop(job, 'use_stereoscopy')
@@ -198,7 +198,8 @@ class RQM_PT_Panel(Panel):
                         'RQM_UL_Tags', '', job, 'stereo_tags', job, 'stereo_tags_index', rows=3
                     )
 
-            col.separator()
+            # Start a fresh column for Compositor Outputs (after the stereo box)
+            col = box.column(align=True)
             col.label(text='Compositor Outputs', icon='NODE_COMPOSITING')
             col.prop(job, 'use_comp_outputs')
             if job.use_comp_outputs:
