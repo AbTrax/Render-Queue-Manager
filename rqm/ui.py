@@ -180,19 +180,21 @@ class RQM_PT_Panel(Panel):
                 col.prop(job, 'rebase_numbering')
 
             col.separator()
-            col.label(text='Stereoscopy', icon='CAMERA_STEREO')
-            col.prop(job, 'use_stereoscopy')
+            stereo_box = box.box()
+            stereo_box.label(text='Stereoscopy / Multi-View', icon='CAMERA_STEREO')
+            stereo_box.prop(job, 'use_stereoscopy')
             if getattr(job, 'use_stereoscopy', False):
                 if hasattr(job, 'stereo_views_format'):
-                    col.prop(job, 'stereo_views_format', text='Views')
-                col.prop(job, 'stereo_extra_tags')
-                col.prop(job, 'stereo_keep_plain')
-                tag_row = col.row(align=True)
+                    row = stereo_box.row()
+                    row.prop(job, 'stereo_views_format', expand=True)
+                stereo_box.prop(job, 'stereo_keep_plain')
+                stereo_box.separator()
+                stereo_box.label(text='Extra View Tags', icon='VIEWLAYER_ACTIVE')
+                stereo_box.prop(job, 'stereo_extra_tags', text='')
                 if hasattr(job, 'use_tag_collection'):
-                    tag_row.prop(job, 'use_tag_collection', text='Use Tag List')
+                    stereo_box.prop(job, 'use_tag_collection', text='Use Tag List')
                 if getattr(job, 'use_tag_collection', False):
-                    tag_box = col.box()
-                    tag_box.template_list(
+                    stereo_box.template_list(
                         'RQM_UL_Tags', '', job, 'stereo_tags', job, 'stereo_tags_index', rows=3
                     )
 
@@ -290,35 +292,35 @@ class RQM_PT_Panel(Panel):
         if has_disabled:
             prev_names = [n for n in st.indirect_disabled_collections.split(';') if n]
             indirect_box.label(text=f'{len(prev_names)} collection(s) currently excluded', icon='INFO')
-            indirect_box.operator(
-                'rqm.toggle_indirect_only',
-                text='Restore Indirect-Only',
-                icon='RESTRICT_RENDER_OFF',
-            )
         else:
             vl_name = target_vl.name if target_vl else '(none)'
             indirect_box.label(
                 text=f'{indirect_count} indirect-only collection(s) in "{vl_name}"',
                 icon='INFO',
             )
-            indirect_box.operator(
-                'rqm.toggle_indirect_only',
-                text='Disable Indirect-Only',
-                icon='RESTRICT_RENDER_ON',
-            )
+        indirect_box.operator(
+            'rqm.toggle_indirect_only',
+            text='Toggle Indirect-Only',
+            icon='RESTRICT_RENDER_ON',
+        )
 
         # --- All Layers toggle ---
         indirect_box.separator()
         has_all_disabled = bool(getattr(st, 'indirect_all_disabled_collections', ''))
         if has_all_disabled:
-            indirect_box.operator(
-                'rqm.toggle_indirect_only_all',
-                text='Restore All Layers',
-                icon='RESTRICT_RENDER_OFF',
-            )
-        else:
-            indirect_box.operator(
-                'rqm.toggle_indirect_only_all',
-                text='Disable All Layers',
-                icon='RESTRICT_RENDER_ON',
-            )
+            count_str = ''
+            try:
+                total = sum(
+                    len(e.split(':', 1)[1].split(','))
+                    for e in st.indirect_all_disabled_collections.split(';')
+                    if ':' in e
+                )
+                count_str = f' ({total} excluded)'
+            except Exception:
+                pass
+            indirect_box.label(text=f'All layers{count_str}', icon='INFO')
+        indirect_box.operator(
+            'rqm.toggle_indirect_only_all',
+            text='Toggle All Layers',
+            icon='RESTRICT_RENDER_ON',
+        )

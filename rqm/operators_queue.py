@@ -592,11 +592,11 @@ class RQM_OT_ToggleIndirectOnly(Operator):
                         disabled_names.append(lc.name)
                 except Exception:
                     pass
-            if not disabled_names:
+            if disabled_names:
+                st.indirect_disabled_collections = ';'.join(disabled_names)
+                self.report({'INFO'}, f'Excluded {len(disabled_names)} indirect-only collection(s) in "{vl.name}".')
+            else:
                 self.report({'INFO'}, f'No indirect-only collections found in "{vl.name}".')
-                return {'FINISHED'}
-            st.indirect_disabled_collections = ';'.join(disabled_names)
-            self.report({'INFO'}, f'Excluded {len(disabled_names)} indirect-only collection(s) in "{vl.name}".')
         return {'FINISHED'}
 
 
