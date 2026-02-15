@@ -262,6 +262,11 @@ class RQM_State(PropertyGroup):
     current_job_index: IntProperty(default=-1)
     render_in_progress: BoolProperty(default=False)
     job_filter: StringProperty(name='Filter Jobs', default='')
+    indirect_target_view_layer: StringProperty(
+        name='View Layer',
+        default='',
+        description='Which view layer the indirect-only toggle operates on (empty = active view layer)',
+    )
     indirect_disabled_collections: StringProperty(
         name='Indirect-disabled collections',
         default='',

@@ -5,6 +5,7 @@ from __future__ import annotations
 import bpy  # type: ignore
 from bpy.types import Panel, UIList  # type: ignore
 
+from .comp import _get_compositor_node_tree
 from .state import get_state
 
 __all__ = ['RQM_UL_Queue', 'RQM_UL_Outputs', 'RQM_UL_Tags', 'RQM_PT_Panel']
@@ -209,11 +210,13 @@ class RQM_PT_Panel(Panel):
                     out = job.comp_outputs[job.comp_outputs_index]
                     sub = col.box()
                     sub.prop(out, 'enabled')
-                    if scn_for_job and scn_for_job.node_tree:
+                    # Use B5-compatible node tree lookup for the prop_search
+                    comp_nt = _get_compositor_node_tree(scn_for_job) if scn_for_job else None
+                    if comp_nt:
                         sub.prop_search(
                             out,
                             'node_name',
-                            scn_for_job.node_tree,
+                            comp_nt,
                             'nodes',
                             text='File Output Node',
                         )
@@ -245,16 +248,53 @@ class RQM_PT_Panel(Panel):
             layout.label(text='Idle')
 
         layout.separator()
-        indirect_row = layout.row(align=True)
+        indirect_box = layout.box()
+        indirect_box.label(text='Indirect-Only Collections', icon='OUTLINER_OB_GROUP_INSTANCE')
+
+        # View layer selector
+        if context.scene:
+            indirect_box.prop_search(
+                st, 'indirect_target_view_layer',
+                context.scene, 'view_layers',
+                text='View Layer',
+            )
+
+        # Determine which view layer to inspect for the count
+        target_vl = None
+        if st.indirect_target_view_layer and context.scene:
+            target_vl = context.scene.view_layers.get(st.indirect_target_view_layer)
+        if not target_vl:
+            target_vl = context.view_layer
+
+        # Count indirect-only collections in the target view layer
+        indirect_count = 0
+        if target_vl:
+            def _count_indirect(lc):
+                count = 0
+                for child in lc.children:
+                    if getattr(child, 'indirect_only', False) and not child.exclude:
+                        count += 1
+                    count += _count_indirect(child)
+                return count
+            indirect_count = _count_indirect(target_vl.layer_collection)
+
         has_disabled = bool(getattr(st, 'indirect_disabled_collections', ''))
+
         if has_disabled:
-            indirect_row.operator(
+            prev_names = [n for n in st.indirect_disabled_collections.split(';') if n]
+            indirect_box.label(text=f'{len(prev_names)} collection(s) currently excluded', icon='INFO')
+            indirect_box.operator(
                 'rqm.toggle_indirect_only',
                 text='Restore Indirect-Only',
                 icon='RESTRICT_RENDER_OFF',
             )
         else:
-            indirect_row.operator(
+            vl_name = target_vl.name if target_vl else '(none)'
+            indirect_box.label(
+                text=f'{indirect_count} indirect-only collection(s) in "{vl_name}"',
+                icon='INFO',
+            )
+            indirect_box.operator(
                 'rqm.toggle_indirect_only',
                 text='Disable Indirect-Only',
                 icon='RESTRICT_RENDER_ON',

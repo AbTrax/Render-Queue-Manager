@@ -10,7 +10,8 @@ from .properties import RQM_CompOutput, RQM_Job
 
 __all__ = [
     'job_root_dir','base_render_dir','comp_root_dir',
-    'get_file_output_node','resolve_base_dir','sync_one_output'
+    'get_file_output_node','resolve_base_dir','sync_one_output',
+    'get_slot_subdirs','_get_compositor_node_tree',
 ]
 
 
@@ -54,6 +55,22 @@ def _new_node_slot(node, name: str):
     return node.file_slots.new(name)
 
 
+def _get_compositor_node_tree(scn):
+    """Return the compositor node tree for *scn* (B5+ vs B3/B4).
+
+    Blender 5.0 moved the compositor from ``scene.node_tree`` to
+    ``scene.compositing_node_group``.  This helper returns the correct
+    one, or *None* if compositing is not set up.
+    """
+    if _is_blender5():
+        # B5: compositing_node_group is the new data-block
+        nt = getattr(scn, 'compositing_node_group', None)
+        if nt is not None:
+            return nt
+    # B3/B4 (and fallback for B5 scenes that haven't created one yet)
+    return getattr(scn, 'node_tree', None)
+
+
 def _get_slot_path(slot) -> str:
     """Read the sub-path / name from a slot (works on both old and new API)."""
     # B5 file_output_items have .name; old file_slots have .path
@@ -93,13 +110,30 @@ def _set_node_format(node, fmt: str):
 
 
 def _enable_compositor(scn):
-    """Ensure the scene's compositor / nodes are enabled (B5-safe)."""
-    try:
-        if hasattr(scn, 'use_nodes'):
-            if not scn.use_nodes:
-                scn.use_nodes = True
-    except Exception:
-        pass
+    """Ensure the scene's compositor / nodes are enabled (B5-safe).
+
+    On Blender 5.0+ ``use_nodes`` is deprecated (always True, setting
+    it is a no-op), so we create a ``compositing_node_group`` if one
+    doesn't exist yet.
+    """
+    if _is_blender5():
+        # Ensure a compositing node group exists
+        if getattr(scn, 'compositing_node_group', None) is None:
+            try:
+                # Blender auto-creates one when the user opens the compositor;
+                # we can also create one via bpy.data.node_groups.new()
+                import bpy
+                ng = bpy.data.node_groups.new(f'{scn.name}_Compositing', 'CompositorNodeTree')
+                scn.compositing_node_group = ng
+            except Exception:
+                pass
+    else:
+        try:
+            if hasattr(scn, 'use_nodes'):
+                if not scn.use_nodes:
+                    scn.use_nodes = True
+        except Exception:
+            pass
 
 
 # ---- Directory helpers ----
@@ -140,7 +174,7 @@ def get_file_output_node(scn, out: RQM_CompOutput):
     if not scn:
         return None, 'No scene.'
     _enable_compositor(scn)
-    nt = scn.node_tree
+    nt = _get_compositor_node_tree(scn)
     if not nt:
         return None, 'Scene has no node tree.'
 
@@ -227,7 +261,7 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
         pass
     # Auto-link first unlinked input to Render Layers if possible (helps ensure node writes files)
     try:
-        nt = scn.node_tree
+        nt = _get_compositor_node_tree(scn)
         rl = None
         for n in nt.nodes:
             if n.bl_idname in {'CompositorNodeRLayers','CompositorNodeRenderLayers'}:
@@ -246,3 +280,32 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
     except Exception:
         pass
     return True, 'OK'
+
+
+def get_slot_subdirs(scn, job: RQM_Job, out: RQM_CompOutput):
+    """Return a list of full directory paths for each slot in the File Output node.
+
+    This enables pre-creating the exact folder tree before rendering starts.
+    """
+    dirs = []
+    node, err = get_file_output_node(scn, out)
+    if not node:
+        return dirs
+    base_dir, err = resolve_base_dir(scn, job, out, node.name)
+    if err or not base_dir:
+        return dirs
+    base_dir = bpy.path.abspath(base_dir or '//')
+    dirs.append(base_dir)
+    # Each slot may define a sub-path that becomes a subdirectory
+    try:
+        for slot in _get_node_slots(node):
+            sp = _get_slot_path(slot).rstrip('/ \\')
+            if not sp or sp == '.':
+                continue
+            # Slot paths can contain directory separators (e.g. "passes/diffuse")
+            slot_dir = os.path.join(base_dir, os.path.dirname(sp)) if os.path.dirname(sp) else base_dir
+            if slot_dir not in dirs:
+                dirs.append(slot_dir)
+    except Exception:
+        pass
+    return dirs

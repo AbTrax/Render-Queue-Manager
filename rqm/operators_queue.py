@@ -8,7 +8,7 @@ import bpy  # type: ignore
 from bpy.props import EnumProperty, IntProperty  # type: ignore
 from bpy.types import Operator  # type: ignore
 
-from .comp import base_render_dir, comp_root_dir, resolve_base_dir
+from .comp import base_render_dir, comp_root_dir, get_slot_subdirs, resolve_base_dir
 from .handlers import register_handlers
 from .jobs import apply_job
 from .properties import RQM_Job
@@ -130,7 +130,7 @@ class RQM_OT_CreateFolders(Operator):
                     errors.append(f"{job.name} (comp root): {err}")
             except Exception as e:
                 errors.append(f"{job.name} (comp root): {e}")
-            # Compositor File Output node directories
+            # Compositor File Output node directories and per-slot subdirectories
             if job.use_comp_outputs and len(job.comp_outputs) > 0:
                 scn = bpy.data.scenes.get(job.scene_name)
                 for out in job.comp_outputs:
@@ -150,6 +150,17 @@ class RQM_OT_CreateFolders(Operator):
                             errors.append(f"{job.name}/{node_name}: {err}")
                     except Exception as e:
                         errors.append(f"{job.name} (comp output): {e}")
+                    # Pre-create per-slot subdirectories
+                    try:
+                        slot_dirs = get_slot_subdirs(scn, job, out)
+                        for sd in slot_dirs:
+                            ok, err = _ensure_dir(sd)
+                            if ok:
+                                dirs_created += 1
+                            elif err:
+                                errors.append(f"{job.name}/{node_name} (slot): {err}")
+                    except Exception as e:
+                        errors.append(f"{job.name} (slot dirs): {e}")
         if errors:
             for e in errors:
                 print(f'[RQM] Create Folders error: {e}')
@@ -546,7 +557,14 @@ class RQM_OT_ToggleIndirectOnly(Operator):
         if st is None:
             self.report({'ERROR'}, 'Add-on not initialized.')
             return {'CANCELLED'}
-        vl = context.view_layer
+
+        # Use the user-selected view layer, or fall back to the active one
+        vl = None
+        target_name = getattr(st, 'indirect_target_view_layer', '')
+        if target_name and context.scene:
+            vl = context.scene.view_layers.get(target_name)
+        if not vl:
+            vl = context.view_layer
         if not vl:
             self.report({'ERROR'}, 'No active view layer.')
             return {'CANCELLED'}
@@ -563,7 +581,7 @@ class RQM_OT_ToggleIndirectOnly(Operator):
                     lc.exclude = False
                     restored += 1
             st.indirect_disabled_collections = ''
-            self.report({'INFO'}, f'Restored {restored} indirect-only collection(s).')
+            self.report({'INFO'}, f'Restored {restored} indirect-only collection(s) in "{vl.name}".')
         else:
             # --- Disable mode ---
             disabled_names = []
@@ -575,8 +593,8 @@ class RQM_OT_ToggleIndirectOnly(Operator):
                 except Exception:
                     pass
             if not disabled_names:
-                self.report({'INFO'}, 'No indirect-only collections found in this view layer.')
+                self.report({'INFO'}, f'No indirect-only collections found in "{vl.name}".')
                 return {'FINISHED'}
             st.indirect_disabled_collections = ';'.join(disabled_names)
-            self.report({'INFO'}, f'Excluded {len(disabled_names)} indirect-only collection(s).')
+            self.report({'INFO'}, f'Excluded {len(disabled_names)} indirect-only collection(s) in "{vl.name}".')
         return {'FINISHED'}
