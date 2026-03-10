@@ -39,9 +39,12 @@ def build(version: str, out_dir: Path) -> Path:
     staging_root.mkdir(parents=True)
 
     # copy files
-    for fname in ['__init__.py', 'README.md', 'CHANGELOG.md', 'LICENSE']:
-        shutil.copy2(ROOT / fname, staging_root / fname)
-    shutil.copytree(ROOT / 'rqm', staging_root / 'rqm')
+    for fname in ['__init__.py', 'blender_manifest.toml', 'README.md', 'CHANGELOG.md', 'LICENSE']:
+        src = ROOT / fname
+        if src.exists():
+            shutil.copy2(src, staging_root / fname)
+    shutil.copytree(ROOT / 'rqm', staging_root / 'rqm',
+                    ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
 
     zip_name = f'render-queue-manager-v{version}.zip'
     zip_path = ROOT / zip_name
@@ -50,7 +53,8 @@ def build(version: str, out_dir: Path) -> Path:
 
     with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED) as z:
         for path in staging_root.rglob('*'):
-            z.write(path, path.relative_to(out_dir))
+            if path.is_file():
+                z.write(path, path.relative_to(out_dir))
 
     sha256 = hashlib.sha256(zip_path.read_bytes()).hexdigest()
     print(f'Created {zip_name} (sha256={sha256})')
