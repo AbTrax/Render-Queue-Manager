@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 
 import bpy  # type: ignore
 from bpy.props import EnumProperty, IntProperty  # type: ignore
@@ -23,7 +25,6 @@ def _operator_scene_items(self, context):
     return items or [('', '<no scenes>', '')]
 
 
-
 def _enabled_view_layer_ids(mapping):
     selected = []
     for ident, layer in mapping.items():
@@ -33,7 +34,6 @@ def _enabled_view_layer_ids(mapping):
         except Exception:
             selected.append(ident)
     return selected
-
 
 
 def _prefill_job_view_layers(job, scn, mapping, fallback_layer):
@@ -63,6 +63,9 @@ __all__ = [
     'RQM_OT_StartQueue',
     'RQM_OT_StopQueue',
     'RQM_OT_DuplicateJob',
+    'RQM_OT_EnableAll',
+    'RQM_OT_DisableAll',
+    'RQM_OT_OpenOutputFolder',
 ]
 
 
@@ -288,6 +291,9 @@ class RQM_OT_DuplicateJob(Operator):
             'stereo_extra_tags',
             'stereo_keep_plain',
             'use_tag_collection',
+            'notes',
+            'use_samples_override',
+            'samples',
         ]:
             if hasattr(dst, attr) and hasattr(src, attr):
                 setattr(dst, attr, getattr(src, attr))
@@ -369,9 +375,6 @@ class RQM_OT_MoveJob(Operator):
         return {'CANCELLED'}
 
 
-# apply_job now imported from jobs module
-
-
 class RQM_OT_StartQueue(Operator):
     bl_idname = 'rqm.start_queue'
     bl_label = 'Start Render Queue'
@@ -382,6 +385,19 @@ class RQM_OT_StartQueue(Operator):
         st = get_state(context)
         if st is None or st.running or not st.queue:
             return {'CANCELLED'}
+        # Auto-save before rendering
+        if getattr(st, 'auto_save', True):
+            try:
+                if bpy.data.is_saved:
+                    bpy.ops.wm.save_mainfile()
+            except Exception:
+                pass
+        # Reset job statuses
+        for job in st.queue:
+            if job.enabled:
+                job.status = 'PENDING'
+            else:
+                job.status = 'SKIPPED'
         register_handlers()
         st.ui_prev_tab = getattr(st, 'ui_tab', 'QUEUE')
         st.ui_tab = 'STATS'
@@ -441,7 +457,7 @@ class RQM_OT_StartQueue(Operator):
                 return {'PASS_THROUGH'}
             st.stall_polls = 0
             print('[RQM] Detected stalled render flag, auto-advancing queue.')
-            st._skip_increment_once = True  # prevent handler increment duplication
+            st.skip_increment = True  # prevent handler increment duplication
             st.render_in_progress = False
             st.current_job_index += 1
             return {'PASS_THROUGH'}
@@ -449,8 +465,10 @@ class RQM_OT_StartQueue(Operator):
         ok, msg = apply_job(job)
         if not ok:
             self.report({'ERROR'}, msg)
+            job.status = 'FAILED'
             st.current_job_index += 1
             return {'PASS_THROUGH'}
+        job.status = 'RENDERING'
         st.render_in_progress = True
         st.stall_polls = 0
         try:
@@ -465,6 +483,7 @@ class RQM_OT_StartQueue(Operator):
             )
         except Exception as e:
             self.report({'ERROR'}, str(e))
+            job.status = 'FAILED'
             st.render_in_progress = False
             st.current_job_index += 1
         return {'PASS_THROUGH'}
@@ -499,4 +518,67 @@ class RQM_OT_StopQueue(Operator):
         except Exception:
             st.ui_tab = 'QUEUE'
         self.report({'INFO'}, 'Queue stopped.')
+        return {'FINISHED'}
+
+
+class RQM_OT_EnableAll(Operator):
+    bl_idname = 'rqm.enable_all'
+    bl_label = 'Enable All Jobs'
+    bl_description = 'Enable all jobs in the queue'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        st = get_state(context)
+        if st is None:
+            return {'CANCELLED'}
+        for job in st.queue:
+            job.enabled = True
+        self.report({'INFO'}, 'All jobs enabled.')
+        return {'FINISHED'}
+
+
+class RQM_OT_DisableAll(Operator):
+    bl_idname = 'rqm.disable_all'
+    bl_label = 'Disable All Jobs'
+    bl_description = 'Disable all jobs in the queue'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        st = get_state(context)
+        if st is None:
+            return {'CANCELLED'}
+        for job in st.queue:
+            job.enabled = False
+        self.report({'INFO'}, 'All jobs disabled.')
+        return {'FINISHED'}
+
+
+class RQM_OT_OpenOutputFolder(Operator):
+    bl_idname = 'rqm.open_output_folder'
+    bl_label = 'Open Output Folder'
+    bl_description = "Open the selected job's output folder in the file explorer"
+
+    def execute(self, context):
+        st = get_state(context)
+        if not st or not (0 <= st.active_index < len(st.queue)):
+            self.report({'WARNING'}, 'No job selected.')
+            return {'CANCELLED'}
+        job = st.queue[st.active_index]
+        from .comp import job_root_dir
+        folder = job_root_dir(job)
+        if not os.path.isdir(folder):
+            folder = bpy.path.abspath(job.output_path or '//renders/')
+        if not os.path.isdir(folder):
+            self.report({'WARNING'}, f'Folder does not exist yet: {folder}')
+            return {'CANCELLED'}
+        try:
+            if sys.platform == 'win32':
+                os.startfile(folder)
+            elif sys.platform == 'darwin':
+                subprocess.Popen(['open', folder])
+            else:
+                subprocess.Popen(['xdg-open', folder])
+        except Exception as e:
+            self.report({'ERROR'}, str(e))
+            return {'CANCELLED'}
         return {'FINISHED'}

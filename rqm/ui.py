@@ -1,4 +1,4 @@
-"""UI Lists and Panels for the add-on (legacy layout parity)."""
+"""UI Lists and Panels for Render Queue Manager X."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import os
 import bpy  # type: ignore
 from bpy.types import Panel, UIList  # type: ignore
 
-from .comp import base_render_dir, job_file_prefix, resolve_base_dir
+from .comp import base_render_dir, get_compositor_node_tree, job_file_prefix, resolve_base_dir
 from .properties import get_job_view_layer_names
 from .state import get_state
 
@@ -122,6 +122,36 @@ def _draw_stats_tab(layout, st):
         text=f"Progress ({progress * 100:.1f}%)",
         slider=True,
     )
+    # Queue progress and estimated time
+    if getattr(st, 'running', False) and has_queue:
+        total = len(st.queue)
+        completed = sum(
+            1 for j in st.queue if getattr(j, 'status', '') == 'COMPLETED'
+        )
+        enabled_total = sum(1 for j in st.queue if j.enabled)
+        box.label(
+            text=f'Queue: {completed}/{enabled_total} jobs completed',
+            icon='SEQUENCE',
+        )
+        total_time = sum(
+            getattr(j, 'last_render_time', 0.0)
+            for j in st.queue
+            if getattr(j, 'status', '') == 'COMPLETED'
+        )
+        if completed > 0:
+            avg_time = total_time / completed
+            remaining = sum(
+                1 for j in st.queue
+                if j.enabled and getattr(j, 'status', '') in ('PENDING', 'RENDERING')
+            )
+            eta = avg_time * remaining
+            if eta >= 3600:
+                eta_str = f'{eta / 3600:.1f}h'
+            elif eta >= 60:
+                eta_str = f'{eta / 60:.1f}m'
+            else:
+                eta_str = f'{eta:.0f}s'
+            box.label(text=f'Estimated remaining: ~{eta_str}', icon='TIME')
     lines = getattr(st, 'stats_lines', None)
     if not lines or len(lines) == 0:
         box.label(text='No render statistics available yet.', icon='TIME')
@@ -143,6 +173,7 @@ def _draw_stats_tab(layout, st):
 def _draw_queue_controls(layout, st):
     layout.separator()
     controls = layout.row(align=True)
+    controls.prop(st, 'auto_save', text='', icon='FILE_TICK')
     if not getattr(st, 'running', False):
         controls.operator('rqm.start_queue', icon='RENDER_ANIMATION')
     else:
@@ -155,6 +186,14 @@ def _draw_queue_controls(layout, st):
         layout.label(text='Idle')
 
 
+_STATUS_ICONS = {
+    'COMPLETED': 'CHECKMARK',
+    'FAILED': 'CANCEL',
+    'RENDERING': 'RENDER_RESULT',
+    'SKIPPED': 'FORWARD',
+}
+
+
 class RQM_UL_Queue(UIList):
     bl_idname = 'RQM_UL_Queue'
 
@@ -164,24 +203,73 @@ class RQM_UL_Queue(UIList):
             row.prop(item, 'enabled', text='')
             sub = row.row(align=True)
             sub.enabled = item.enabled
-            sub.prop(item, 'name', text='', emboss=False, icon='RENDER_RESULT')
+            status = getattr(item, 'status', 'PENDING')
+            status_icon = _STATUS_ICONS.get(status, 'RENDER_RESULT')
+            sub.prop(item, 'name', text='', emboss=False, icon=status_icon)
             cam_part = item.camera_name or '<no cam>'
             sub.label(text=f"{item.scene_name}:{cam_part}")
+            render_time = getattr(item, 'last_render_time', 0.0)
+            if render_time > 0:
+                if render_time >= 3600:
+                    time_str = f'{render_time/3600:.1f}h'
+                elif render_time >= 60:
+                    time_str = f'{render_time/60:.1f}m'
+                else:
+                    time_str = f'{render_time:.1f}s'
+                sub.label(text=time_str, icon='TIME')
         else:
             layout.alignment = 'CENTER'
             layout.label(text='', icon='RENDER_RESULT')
+
+    def filter_items(self, context, data, propname):
+        items = getattr(data, propname)
+        flt_flags = [self.bitflag_filter_item] * len(items)
+        flt_neworder = list(range(len(items)))
+        filter_name = self.filter_name
+        if filter_name:
+            filter_lower = filter_name.lower()
+            for i, item in enumerate(items):
+                name = (getattr(item, 'name', '') or '').lower()
+                scene = (getattr(item, 'scene_name', '') or '').lower()
+                cam = (getattr(item, 'camera_name', '') or '').lower()
+                notes = (getattr(item, 'notes', '') or '').lower()
+                if (filter_lower not in name and filter_lower not in scene
+                        and filter_lower not in cam and filter_lower not in notes):
+                    flt_flags[i] = 0
+        return flt_flags, flt_neworder
 
 
 class RQM_UL_Outputs(UIList):
     bl_idname = 'RQM_UL_Outputs'
 
+    def _resolve_display_name(self, context, item):
+        """Return the node label if available, otherwise the stored node_name."""
+        name = item.node_name
+        if not name:
+            return '(no node)'
+        try:
+            st = getattr(context.scene, 'rqm_state', None)
+            scn = None
+            if st and 0 <= st.active_index < len(st.queue):
+                job = st.queue[st.active_index]
+                scn = bpy.data.scenes.get(job.scene_name) if job.scene_name else None
+            if not scn:
+                scn = context.scene
+            nt = get_compositor_node_tree(scn)
+            if nt:
+                node = nt.nodes.get(name)
+                if node:
+                    return node.label or node.name
+        except Exception:
+            pass
+        return name
+
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             row = layout.row(align=True)
             row.prop(item, 'enabled', text='')
-            # show as shorter label + editable text button
-            split = row.split(factor=0.65, align=True)
-            split.prop(item, 'node_name', text='', emboss=True, icon='NODE_COMPOSITING')
+            display = self._resolve_display_name(context, item)
+            row.label(text=display, icon='NODE_COMPOSITING')
         else:
             layout.alignment = 'CENTER'
             layout.label(text='', icon='NODE_COMPOSITING')
@@ -227,6 +315,10 @@ class RQM_PT_Panel(Panel):
         header.operator('rqm.add_cameras_in_scene', icon='OUTLINER_OB_CAMERA')
         header.operator('rqm.clear_queue', icon='TRASH')
 
+        toggle_row = layout.row(align=True)
+        toggle_row.operator('rqm.enable_all', icon='CHECKBOX_HLT')
+        toggle_row.operator('rqm.disable_all', icon='CHECKBOX_DEHLT')
+
         row_list = layout.row()
         row_list.template_list('RQM_UL_Queue', '', st, 'queue', st, 'active_index', rows=6)
         side = row_list.column(align=True)
@@ -235,6 +327,11 @@ class RQM_PT_Panel(Panel):
             dup.index = st.active_index
             rem = side.operator('rqm.remove_job', text='', icon='X')
             rem.index = st.active_index
+            side.separator()
+            up = side.operator('rqm.move_job', text='', icon='TRIA_UP')
+            up.direction = 'UP'
+            dn = side.operator('rqm.move_job', text='', icon='TRIA_DOWN')
+            dn.direction = 'DOWN'
 
         if 0 <= st.active_index < len(st.queue):
             job = st.queue[st.active_index]
@@ -250,6 +347,9 @@ class RQM_PT_Panel(Panel):
                 pass
             top_row.prop(job, 'enabled', text='')
             top_row.prop(job, 'name', text='Name')
+
+            if hasattr(job, 'notes'):
+                box.prop(job, 'notes', text='Notes', icon='TEXT')
 
             row = box.row()
             row.prop(job, 'scene_name', text='Scene')
@@ -284,6 +384,13 @@ class RQM_PT_Panel(Panel):
                 pd_row = box.row()
                 pd_row.enabled = job.engine == 'CYCLES'
                 pd_row.prop(job, 'use_persistent_data', text='Persistent Data (Cycles)')
+
+            if hasattr(job, 'use_samples_override'):
+                samp_row = box.row(align=True)
+                samp_row.prop(job, 'use_samples_override')
+                sub_samp = samp_row.row(align=True)
+                sub_samp.enabled = getattr(job, 'use_samples_override', False)
+                sub_samp.prop(job, 'samples', text='Samples')
 
             col = box.column(align=True)
             col.label(text='Resolution')
@@ -324,6 +431,7 @@ class RQM_PT_Panel(Panel):
             col.label(text='Standard Output', icon='FILE_FOLDER')
             col.prop(job, 'file_format')
             col.prop(job, 'output_path')
+            col.operator('rqm.open_output_folder', text='Open Output Folder', icon='FILEBROWSER')
             if hasattr(job, 'file_basename'):
                 col.prop(job, 'file_basename', text='Filename prefix')
             if hasattr(job, 'prefix_files_with_job_name'):
@@ -379,16 +487,19 @@ class RQM_PT_Panel(Panel):
                     out = job.comp_outputs[job.comp_outputs_index]
                     sub = col.box()
                     sub.prop(out, 'enabled')
-                    if scn_for_job and scn_for_job.node_tree:
-                        sub.prop_search(
-                            out,
-                            'node_name',
-                            scn_for_job.node_tree,
-                            'nodes',
-                            text='File Output Node',
-                        )
-                    else:
-                        sub.prop(out, 'node_name', text='File Output Node')
+                    # Node selection: single dropdown picker
+                    _btn_label = out.node_name or 'Select Node\u2026'
+                    if out.node_name and scn_for_job:
+                        _nt = get_compositor_node_tree(scn_for_job)
+                        if _nt:
+                            _nd = _nt.nodes.get(out.node_name)
+                            if _nd:
+                                _btn_label = _nd.label or _nd.name
+                    sub.operator_menu_enum(
+                        'rqm.pick_file_output_node', 'node',
+                        text=_btn_label,
+                        icon='NODE_COMPOSITING',
+                    )
                     sub.prop(out, 'create_if_missing')
                     sub.prop(out, 'override_node_format')
                     sub.prop(out, 'use_custom_encoding')

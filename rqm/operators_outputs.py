@@ -3,9 +3,49 @@ from __future__ import annotations
 import bpy  # type: ignore
 from bpy.types import Operator  # type: ignore
 from bpy.props import EnumProperty  # type: ignore
+from .comp import get_compositor_node_tree
 from .state import get_state
 
-__all__ = ['RQM_OT_Output_Add','RQM_OT_Output_Remove','RQM_OT_Output_Move']
+__all__ = [
+    'RQM_OT_Output_Add', 'RQM_OT_Output_Remove', 'RQM_OT_Output_Move',
+    'RQM_OT_PickFileOutputNode',
+]
+
+
+def _pick_node_items(self, context):
+    """Dynamic enum items: list File Output nodes from the active job's scene."""
+    items = []
+    try:
+        st = getattr(context.scene, 'rqm_state', None)
+        if st and 0 <= st.active_index < len(st.queue):
+            job = st.queue[st.active_index]
+            scn = bpy.data.scenes.get(job.scene_name) if job.scene_name else None
+            nt = get_compositor_node_tree(scn) if scn else None
+            if nt:
+                for node in nt.nodes:
+                    if node.bl_idname == 'CompositorNodeOutputFile':
+                        display = node.label or node.name
+                        items.append((node.name, display, node.name))
+    except Exception:
+        pass
+    if not items:
+        try:
+            scn = context.scene
+            nt = get_compositor_node_tree(scn) if scn else None
+            if nt:
+                for node in nt.nodes:
+                    if node.bl_idname == 'CompositorNodeOutputFile':
+                        display = node.label or node.name
+                        items.append((node.name, display, node.name))
+        except Exception:
+            pass
+    if not items:
+        items.append(('NONE', 'No File Output Nodes Found', 'Enable Use Nodes in the compositor and add a File Output node'))
+    return items
+
+
+# Cache to prevent garbage collection of dynamic enum items
+_pick_node_items_cache: list = []
 
 class RQM_OT_Output_Add(Operator):
     bl_idname = 'rqm.output_add'
@@ -78,4 +118,26 @@ class RQM_OT_Output_Move(Operator):
             job.comp_outputs_index += 1
             return {'FINISHED'}
         return {'CANCELLED'}
+
+
+class RQM_OT_PickFileOutputNode(Operator):
+    bl_idname = 'rqm.pick_file_output_node'
+    bl_label = 'Select File Output Node'
+    bl_description = 'Pick a Compositor File Output node from the scene'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    node: EnumProperty(name='Node', items=_pick_node_items)
+
+    def execute(self, context):
+        if self.node == 'NONE':
+            self.report({'WARNING'}, 'No File Output nodes available')
+            return {'CANCELLED'}
+        st = get_state(context)
+        if not (st and 0 <= st.active_index < len(st.queue)):
+            return {'CANCELLED'}
+        job = st.queue[st.active_index]
+        idx = job.comp_outputs_index
+        if 0 <= idx < len(job.comp_outputs):
+            job.comp_outputs[idx].node_name = self.node
+        return {'FINISHED'}
 

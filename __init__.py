@@ -1,6 +1,6 @@
 """Render Queue Manager X - Blender extension entry point."""
 
-__version__ = "1.15.1"
+__version__ = "2.1.0"
 
 # --- Hot reload support ---
 import importlib, sys
@@ -23,10 +23,12 @@ from .rqm.properties import RQM_CompOutput, RQM_EncodingSettings, RQM_Job, RQM_R
 from .rqm.operators_queue import (
     RQM_OT_AddFromCurrent, RQM_OT_AddCamerasInScene, RQM_OT_RemoveJob, RQM_OT_ClearQueue,
     RQM_OT_MoveJob, RQM_OT_StartQueue, RQM_OT_StopQueue,
-    RQM_OT_DuplicateJob
+    RQM_OT_DuplicateJob, RQM_OT_EnableAll, RQM_OT_DisableAll,
+    RQM_OT_OpenOutputFolder,
 )
 from .rqm.operators_outputs import (
-    RQM_OT_Output_Add, RQM_OT_Output_Remove, RQM_OT_Output_Move
+    RQM_OT_Output_Add, RQM_OT_Output_Remove, RQM_OT_Output_Move,
+    RQM_OT_PickFileOutputNode,
 )
 from .rqm.ui import RQM_UL_Queue, RQM_UL_Outputs, RQM_UL_Tags, RQM_PT_Panel
 from .rqm import comp  # ensure compositor logic packaged
@@ -39,8 +41,10 @@ classes = (
     RQM_Tag, RQM_EncodingSettings, RQM_CompOutput, RQM_RenderStat, RQM_Job, RQM_State,
     RQM_OT_AddFromCurrent, RQM_OT_AddCamerasInScene, RQM_OT_RemoveJob, RQM_OT_ClearQueue,
     RQM_OT_MoveJob, RQM_OT_StartQueue, RQM_OT_StopQueue,
-    RQM_OT_DuplicateJob,
+    RQM_OT_DuplicateJob, RQM_OT_EnableAll, RQM_OT_DisableAll,
+    RQM_OT_OpenOutputFolder,
     RQM_OT_Output_Add, RQM_OT_Output_Remove, RQM_OT_Output_Move,
+    RQM_OT_PickFileOutputNode,
     RQM_UL_Queue, RQM_UL_Outputs, RQM_UL_Tags, RQM_PT_Panel,
 )
 

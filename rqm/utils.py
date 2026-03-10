@@ -1,6 +1,4 @@
-"""Utility helpers for Render Queue Manager X.
-Separated from monolithic script.
-"""
+"""Utility helpers for Render Queue Manager X."""
 from __future__ import annotations
 import os, re
 import bpy
@@ -91,9 +89,10 @@ def engine_items(self, context):
         pass
     if 'CYCLES' not in seen:
         items.append(('CYCLES', 'Cycles', 'Cycles Render Engine'))
-    if 'BLENDER_WORKBENCH' not in seen:
-        items.append(('BLENDER_WORKBENCH', 'Workbench', 'Workbench render engine'))
-    return items or [('BLENDER_EEVEE', 'Eevee', 'Eevee Render Engine')]
+    # Blender 4.2+ uses BLENDER_EEVEE_NEXT / BLENDER_WORKBENCH_NEXT;
+    # Blender 5.x may rename them back. Handle both.
+    return items or [('CYCLES', 'Cycles', 'Cycles Render Engine')]
+
 
 _valid_node_formats = {'PNG','OPEN_EXR','OPEN_EXR_MULTILAYER','JPEG','BMP','TIFF'}
 _valid_job_formats = {'PNG','OPEN_EXR','JPEG','BMP','TIFF'}

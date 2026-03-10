@@ -1,4 +1,4 @@
-"""Compositor output and path resolution logic (ported from monolithic version)."""
+"""Compositor output and path resolution logic."""
 from __future__ import annotations
 import os
 import bpy  # type: ignore
@@ -9,10 +9,28 @@ from .utils import (
 from .properties import RQM_CompOutput, RQM_Job
 
 __all__ = [
-    'job_root_dir','base_render_dir','comp_root_dir',
-    'get_file_output_node','resolve_base_dir','sync_one_output',
-    'job_file_prefix'
+    'job_root_dir',
+    'base_render_dir',
+    'comp_root_dir',
+    'get_compositor_node_tree',
+    'get_file_output_node',
+    'resolve_base_dir',
+    'sync_one_output',
+    'job_file_prefix',
 ]
+
+
+def get_compositor_node_tree(scn):
+    """Return the compositor NodeTree for *scn*, or None.
+
+    Blender 5.0 moved the compositor tree from ``scene.node_tree`` to
+    ``scene.compositing_node_group``.  Try the new attribute first so
+    the add-on works on both 4.x and 5.x.
+    """
+    nt = getattr(scn, 'compositing_node_group', None)
+    if nt is not None:
+        return nt
+    return getattr(scn, 'node_tree', None)
 
 
 def _append_job_suffix(folder: str, job: RQM_Job, token: str | None = None) -> str:
@@ -164,26 +182,27 @@ def job_file_prefix(
         prefix_core = f'{prefix_core} '
     return prefix_core
 
+
 def job_root_dir(job: RQM_Job) -> str:
     root = bpy.path.abspath(job.output_path)
     return os.path.join(root, _sanitize_component(job.name or 'job'))
+
 
 def base_render_dir(job: RQM_Job) -> str:
     base = os.path.join(job_root_dir(job), 'base')
     return _append_job_suffix(base, job, 'base')
 
+
 def comp_root_dir(job: RQM_Job) -> str:
-    # Flatten structure: compositor outputs share job root (no separate 'comp' folder)
     return job_root_dir(job)
+
 
 def get_file_output_node(scn, out: RQM_CompOutput):
     if not scn:
         return None, 'No scene.'
-    if not scn.use_nodes:
-        scn.use_nodes = True
-    nt = scn.node_tree
+    nt = get_compositor_node_tree(scn)
     if not nt:
-        return None, 'Scene has no node tree.'
+        return None, 'Scene has no compositor node tree.'
 
     node = None
     if out.node_name:
@@ -193,9 +212,12 @@ def get_file_output_node(scn, out: RQM_CompOutput):
     if not node and out.create_if_missing:
         node = nt.nodes.new('CompositorNodeOutputFile')
         node.label = 'RQM File Output'
-        base = 'RQM_File_Output'; name = base; i = 1
+        base = 'RQM_File_Output'
+        name = base
+        i = 1
         while nt.nodes.get(name):
-            i += 1; name = f'{base}_{i}'
+            i += 1
+            name = f'{base}_{i}'
         node.name = name
         node.location = (400, 200)
         out.node_name = node.name
@@ -343,24 +365,19 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
             out.last_auto_prefix = target_core
         except Exception:
             pass
-    # Auto-link first unlinked input to Render Layers if possible (helps ensure node writes files)
+    # Auto-link first unlinked input to Render Layers if possible
     try:
-        nt = scn.node_tree
+        nt = get_compositor_node_tree(scn)
         rl = None
         for n in nt.nodes:
-            if n.bl_idname in {'CompositorNodeRLayers','CompositorNodeRenderLayers'}:
-                rl = n; break
+            if n.bl_idname in ('CompositorNodeRLayers', 'CompositorNodeRenderLayers'):
+                rl = n
+                break
         if rl and node.inputs:
             for sock in node.inputs:
                 if not sock.is_linked and rl.outputs:
                     nt.links.new(rl.outputs[0], sock)
                     break
-    except Exception:
-        pass
-    print(f"[RQM] Compositor node '{node.name}' -> {base_dir}")
-    try:
-        for fs in node.file_slots:
-            print(f"[RQM]   slot '{fs.path}'")
     except Exception:
         pass
     return True, 'OK'

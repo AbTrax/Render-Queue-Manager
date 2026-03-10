@@ -1,13 +1,7 @@
-"""Handlers for render lifecycle.
-
-Adds a light post-render step to adjust stereoscopic filenames when the
-user prefers view name before the frame number with a space, e.g.:
-    renderLeft0001.png -> renderLeft 0001.png
-This only runs if a job had stereoscopy enabled and files exist. Failures are silent.
-"""
+"""Handlers for render lifecycle, stereoscopic renaming, and frame rebasing."""
 from __future__ import annotations
 import bpy  # type: ignore
-import os, re, glob
+import os, re, glob, time
 from .comp import base_render_dir
 from .state import get_state
 
@@ -175,7 +169,8 @@ def register_handlers():
     _marker_cache.clear()
     _rebase_progress.clear()
     if not _tagged(bpy.app.handlers.render_complete):
-        def _on_render_complete(scene):
+        def _on_render_complete(*args):
+            scene = args[0] if args else None
             st = _active_state(scene)
             if not st:
                 return
@@ -192,6 +187,19 @@ def register_handlers():
                 st.stall_polls = 0
             except Exception:
                 pass
+            # Track render time
+            if finished_job:
+                try:
+                    start_t = getattr(st, 'render_start_time', 0.0)
+                    if start_t > 0:
+                        finished_job.last_render_time = time.time() - start_t
+                        st.render_start_time = 0.0
+                except Exception:
+                    pass
+                try:
+                    finished_job.status = 'COMPLETED'
+                except Exception:
+                    pass
             # Attempt stereo rename for just-finished job (current_job_index points to finished job)
             try:
                 idx = st.current_job_index
@@ -211,15 +219,19 @@ def register_handlers():
                         pass
             except Exception:
                 pass
-            if st.running and was_render and not getattr(st, '_skip_increment_once', False) and st.current_job_index < len(st.queue):
+            if st.running and was_render and not getattr(st, 'skip_increment', False) and st.current_job_index < len(st.queue):
                 st.current_job_index += 1
-            st._skip_increment_once = False
+            try:
+                st.skip_increment = False
+            except Exception:
+                pass
             _mark_status(st, 'Render finished', progress=1.0)
         _on_render_complete._rqm_tag = True
         bpy.app.handlers.render_complete.append(_on_render_complete)
 
     if not _tagged(bpy.app.handlers.render_cancel):
-        def _on_render_cancel(scene):
+        def _on_render_cancel(*args):
+            scene = args[0] if args else None
             st = _active_state(scene)
             if not st:
                 return
@@ -236,11 +248,18 @@ def register_handlers():
                 st.stall_polls = 0
             except Exception:
                 pass
-            if st.running and was_render and not getattr(st, '_skip_increment_once', False) and st.current_job_index < len(st.queue):
+            if st.running and was_render and not getattr(st, 'skip_increment', False) and st.current_job_index < len(st.queue):
                 st.current_job_index += 1
-            st._skip_increment_once = False
+            try:
+                st.skip_increment = False
+            except Exception:
+                pass
             _mark_status(st, 'Render cancelled')
             if finished_job:
+                try:
+                    finished_job.status = 'FAILED'
+                except Exception:
+                    pass
                 try:
                     _rebase_progress.pop(finished_job.as_pointer(), None)
                 except Exception:
@@ -249,10 +268,16 @@ def register_handlers():
         bpy.app.handlers.render_cancel.append(_on_render_cancel)
 
     if not _tagged(bpy.app.handlers.render_init):
-        def _on_render_init(scene):
+        def _on_render_init(*args):
+            scene = args[0] if args else None
             st = _active_state(scene)
             if not st:
                 return
+            # Track render start time
+            try:
+                st.render_start_time = time.time()
+            except Exception:
+                pass
             status = 'Initializing render'
             try:
                 if st.running and 0 <= st.current_job_index < len(st.queue):
@@ -266,8 +291,14 @@ def register_handlers():
         _on_render_init._rqm_tag = True
         bpy.app.handlers.render_init.append(_on_render_init)
 
-    if not _tagged(bpy.app.handlers.render_stats):
-        def _on_render_stats(stats):
+    if hasattr(bpy.app.handlers, 'render_stats') and not _tagged(bpy.app.handlers.render_stats):
+        def _on_render_stats(*args):
+            # Blender may pass (stats_text,) or (scene, stats_text)
+            stats = ''
+            for arg in reversed(args):
+                if isinstance(arg, str):
+                    stats = arg
+                    break
             st = _active_state()
             if not st:
                 return
@@ -275,7 +306,8 @@ def register_handlers():
         _on_render_stats._rqm_tag = True
         bpy.app.handlers.render_stats.append(_on_render_stats)
     if not _tagged(bpy.app.handlers.render_write):
-        def _on_render_write(scene):
+        def _on_render_write(*args):
+            scene = args[0] if args else None
             st = _active_state(scene)
             if not st:
                 return
@@ -321,7 +353,8 @@ def unregister_handlers():
         _remove_tagged(bpy.app.handlers.render_complete)
         _remove_tagged(bpy.app.handlers.render_cancel)
         _remove_tagged(bpy.app.handlers.render_init)
-        _remove_tagged(bpy.app.handlers.render_stats)
+        if hasattr(bpy.app.handlers, 'render_stats'):
+            _remove_tagged(bpy.app.handlers.render_stats)
         _remove_tagged(bpy.app.handlers.render_write)
     except Exception:
         pass

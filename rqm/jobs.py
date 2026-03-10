@@ -1,9 +1,9 @@
-"""Job application logic (scene setup, frame range, outputs, compositor sync)."""
+"""Job application logic — scene setup, frame range, outputs, compositor sync."""
 from __future__ import annotations
 import os
 import bpy  # type: ignore
 from .utils import _ensure_dir, apply_encoding_settings, view_layer_identifier_map
-from .comp import base_render_dir, sync_one_output, job_file_prefix
+from .comp import base_render_dir, comp_root_dir, sync_one_output, job_file_prefix
 from .properties import RQM_Job, get_job_view_layer_names, sync_job_view_layers
 
 __all__ = ['apply_job']
@@ -25,6 +25,20 @@ def apply_job(job: RQM_Job):
         try:
             if hasattr(scn.render, 'use_persistent_data'):
                 scn.render.use_persistent_data = bool(persistent_flag)
+        except Exception:
+            pass
+    # Apply samples override before rendering
+    if getattr(job, 'use_samples_override', False):
+        samples_val = getattr(job, 'samples', 128)
+        try:
+            if scn.render.engine == 'CYCLES' and hasattr(scn, 'cycles'):
+                scn.cycles.samples = samples_val
+            elif hasattr(scn, 'eevee'):
+                eevee = scn.eevee
+                for attr in ('taa_render_samples', 'samples'):
+                    if hasattr(eevee, attr):
+                        setattr(eevee, attr, samples_val)
+                        break
         except Exception:
             pass
     if scn.render.engine == 'CYCLES':
@@ -148,9 +162,8 @@ def apply_job(job: RQM_Job):
         pass
     bdir = base_render_dir(job)
     _ensure_dir(bdir)
-    # Pre-create compositor root as well to reduce race conditions for File Output nodes
+    # Pre-create compositor root to reduce race conditions for File Output nodes
     try:
-        from .comp import comp_root_dir
         _ensure_dir(comp_root_dir(job))
     except Exception:
         pass

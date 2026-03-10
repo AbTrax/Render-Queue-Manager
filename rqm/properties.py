@@ -216,7 +216,7 @@ class RQM_CompOutput(PropertyGroup):
     node_name: StringProperty(
         name='File Output Node',
         default='',
-        description="Pick a Compositor File Output node to drive. We'll set its base folder only.",
+        description='Name of a Compositor File Output node to drive',
     )
     create_if_missing: BoolProperty(
         name='Create if missing (once)',
@@ -324,7 +324,7 @@ class RQM_Job(PropertyGroup):
 
     res_x: IntProperty(name='Width', default=1920, min=4)
     res_y: IntProperty(name='Height', default=1080, min=4)
-    percent: IntProperty(name='Scale %', default=100, min=1, max=100)
+    percent: IntProperty(name='Scale %', default=100, min=1, max=10000)
 
     use_persistent_data: BoolProperty(
         name='Persistent Data',
@@ -405,7 +405,7 @@ class RQM_Job(PropertyGroup):
 
     use_comp_outputs: BoolProperty(name='Use Compositor outputs', default=False)
     comp_outputs_non_blocking: BoolProperty(
-        name='Don’t block render on compositor errors', default=True
+        name="Don't block render on compositor errors", default=True
     )
     comp_outputs: CollectionProperty(type=RQM_CompOutput)
     comp_outputs_index: IntProperty(default=0)
@@ -452,6 +452,42 @@ class RQM_Job(PropertyGroup):
         ),
     )
 
+    notes: StringProperty(
+        name='Notes',
+        default='',
+        description='Optional notes or description for this job',
+    )
+    use_samples_override: BoolProperty(
+        name='Override Samples',
+        default=False,
+        description='Use a custom sample count instead of the scene setting',
+    )
+    samples: IntProperty(
+        name='Samples',
+        default=128,
+        min=1,
+        max=1048576,
+        description='Number of render samples for this job (Cycles/Eevee)',
+    )
+    last_render_time: FloatProperty(
+        name='Last Render Time',
+        default=0.0,
+        options={'HIDDEN'},
+        description='Time in seconds the last render took',
+    )
+    status: EnumProperty(
+        name='Status',
+        items=[
+            ('PENDING', 'Pending', 'Not yet rendered'),
+            ('RENDERING', 'Rendering', 'Currently rendering'),
+            ('COMPLETED', 'Completed', 'Rendered successfully'),
+            ('FAILED', 'Failed', 'Render failed or cancelled'),
+            ('SKIPPED', 'Skipped', 'Skipped (disabled)'),
+        ],
+        default='PENDING',
+        options={'HIDDEN'},
+    )
+
 
 class RQM_State(PropertyGroup):
     queue: CollectionProperty(type=RQM_Job)
@@ -480,3 +516,10 @@ class RQM_State(PropertyGroup):
     )
     stats_raw: StringProperty(name='Raw Stats', default='', options={'HIDDEN'})
     stats_lines: CollectionProperty(type=RQM_RenderStat)
+    skip_increment: BoolProperty(default=False, options={'HIDDEN'})
+    render_start_time: FloatProperty(default=0.0, options={'HIDDEN'})
+    auto_save: BoolProperty(
+        name='Auto Save',
+        default=True,
+        description='Save the .blend file before starting the render queue',
+    )

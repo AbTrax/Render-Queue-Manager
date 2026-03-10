@@ -1,6 +1,6 @@
 # Render Queue Manager X — Reliable Multi-Job Rendering for Blender
 
-**Version:** 1.14.2 - **Blender Compatibility:** 4.2+ (Extensions build; use the legacy add-on zip for Blender 3.x)
+**Version:** 2.1.0 — **Blender Compatibility:** 4.2+ / 5.x (Extensions build)
 
 Render Queue Manager X is a modular toolkit for orchestrating Blender renders authored by **Xnom3d**. Queue per-scene jobs, keep compositor outputs tidy, and ship consistent folders for every shot without babysitting renders. Install once and drive the workflow from the **Properties ▸ Output** tab under **Render Queue Manager X**.
 
@@ -12,12 +12,20 @@ Render Queue Manager X is a modular toolkit for orchestrating Blender renders au
 
 - **Queue-Based Workflow**
   - Capture scene, camera, frame range, engine, and resolution per job.
-  - Duplicate, reorder, or clear jobs without touching the base scene.
+  - Duplicate, reorder, enable/disable, or clear jobs without touching the base scene.
+  - Filter the queue by name, scene, camera, or notes.
+- **Render Stats & Time Tracking**
+  - Live progress bar, status text, and parsed statistics during rendering.
+  - Per-job render time recorded and displayed in the queue list.
+- **Per-Job Overrides**
+  - Override render samples (Cycles / Eevee) and encoding per job.
+  - Free-text notes field for annotating jobs.
 - **Deterministic Output Layout**
   - Every job renders to `<root>/<job>/base/<basename><frame>.<ext>`.
   - Compositor outputs nest under `<root>/<job>/<NodeName>/…` with job-prefixed filenames.
 - **Compositor File Outputs**
   - Manage multiple File Output nodes per job with optional auto-create.
+  - **File Output node picker** — dropdown lists only File Output nodes in the scene compositor for quick selection.
   - Override file format and encoding per output or inherit from the job.
 - **Timeline Marker Integration**
   - Link start/end markers so frame ranges update automatically when you slide markers.
@@ -25,9 +33,13 @@ Render Queue Manager X is a modular toolkit for orchestrating Blender renders au
 - **Stereoscopic & Multiview Support**
   - Toggle stereoscopy per job with combined or split view exports.
   - Add extra view tags and control output folder suffixing.
-- **Extensible Hooks**
-  - Register preprocessors that run before each job for custom validation or automation.
-  - Windows-safe path sanitizing keeps generated folders usable everywhere.
+- **Blender 5 Compatible**
+  - All handler signatures, property declarations, and engine identifiers work across Blender 4.2 – 5.x.
+- **Quality of Life**
+  - **Open Output Folder** button opens the job’s render directory in the file explorer.
+  - **Auto-save** optionally saves the .blend file before starting the queue.
+  - **Job status indicators** — completed, failed, rendering, and skipped icons in the queue list.
+  - **Estimated time remaining** shown during queue rendering based on completed job averages.
 
 ---
 
@@ -49,7 +61,7 @@ Render Queue Manager X is a modular toolkit for orchestrating Blender renders au
 2. Ensure the folder name is `render_queue_manager_x`.
 3. Restart Blender and enable the extension from **Preferences > Extensions**.
 
-> Supporting Blender 4.1 or earlier? Use the final add-on zip from previous releases; the extension packaging requires Blender 4.2 or newer.
+> Supporting Blender 4.1 or earlier? Use the final add-on zip from the 1.x releases; the extension packaging requires Blender 4.2 or newer.
 
 ---
 
@@ -70,7 +82,9 @@ Each panel section is collapsible so you can focus on the controls you need. Hov
 ### Job Queue
 
 - Toggle job enable state, reorder entries, and duplicate setups for variants.
-- Override scene, camera, view layers, render engine, resolution, and sampling.
+- Enable or disable all jobs at once with the bulk toggle buttons.
+- Override scene, camera, view layers, render engine, resolution, and samples.
+- Filter the queue list to quickly find jobs by name, scene, camera, or notes.
 - Rebase animation numbering so exported filenames always start at frame `0000`.
 
 ### Compositor Outputs
@@ -98,10 +112,18 @@ Each panel section is collapsible so you can focus on the controls you need. Hov
 
 ## Release Notes
 
-### 1.14.2
+### 2.1.0
 
-- Renamed the project to **Render Queue Manager X**.
-- Adopted the GPL license and refreshed documentation to match the new branding.
+- **File Output node picker** — compositor output section now shows a filtered dropdown of File Output nodes.
+- **Open Output Folder** — button to open the job's render directory in the OS file explorer.
+- **Auto-save before render** — optionally saves the .blend file before the queue starts (on by default).
+- **Job status tracking** — queue list shows status icons: checkmark (completed), cancel (failed), forward (skipped).
+- **Estimated time remaining** — stats tab shows ETA based on average completed job render times.
+
+### 2.0.0
+
+- **Blender 5 support** — fully compatible with Blender 4.2 through 5.x.
+- Enable All / Disable All operators, per-job render time tracking, queue filtering, sample overrides, notes field, move buttons, and live render stats tab.
 
 Refer to `CHANGELOG.md` for a complete history of prior releases.
 

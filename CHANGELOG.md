@@ -2,15 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.1.0] - 2026-03-10
+
+### Added
+
+- **File Output node picker** — compositor output settings now show a filtered dropdown listing only `CompositorNodeOutputFile` nodes in the scene, replacing the previous unfiltered node search.
+- **Open Output Folder** operator — opens the selected job's render directory in the OS file explorer (Windows, macOS, Linux).
+- **Auto-save before render** — toggle (on by default) to save the `.blend` file before the queue starts.
+- **Job status tracking** — each job tracks its status (`Pending`, `Rendering`, `Completed`, `Failed`, `Skipped`) and shows a corresponding icon in the queue list.
+- **Estimated time remaining** — the Stats tab shows queue progress and estimated remaining time based on average completed job durations.
 
 ### Changed
 
-- Converted the project to Blender's Extensions packaging, replacing `bl_info` with `blender_manifest.toml` and updated build tooling to match.
+- `StartQueue` now resets all job statuses to `Pending`/`Skipped` before rendering begins.
+- Queue controls row now includes the auto-save toggle icon.
+
+## [2.0.0] - 2025-07-23
+
+### Added
+
+- **Blender 5 compatibility** — all handler signatures accept `*args`; dynamic PropertyGroup attributes replaced with proper `BoolProperty`/`FloatProperty` declarations; render engine fallbacks handle renamed identifiers (`BLENDER_EEVEE_NEXT`, `BLENDER_WORKBENCH_NEXT`).
+- **Enable All / Disable All** operators to toggle every job in the queue at once.
+- **Per-job render time tracking** — each job records how long its last render took; displayed in the queue list.
+- **Queue filtering** — search/filter jobs by name, scene, camera, or notes in the queue list.
+- **Per-job sample override** — optionally set a custom sample count (Cycles / Eevee) per job.
+- **Per-job notes field** — free-text notes for annotating or describing jobs.
+- **Move buttons** in the queue sidebar for reordering jobs.
+- **Render Stats tab** — live progress bar, status text, and parsed statistics during rendering.
+
+### Changed
+
+- Converted to Blender Extensions packaging (`blender_manifest.toml`), replacing legacy `bl_info`.
+- `percent` (resolution scale) max raised from 100 to 10000 for super-sampling workflows.
+- Compositor debug `print()` statements removed; output is now silent.
+- Code cleaned up across all modules: consistent docstrings, formatting, and import structure.
+- Deprecated `zero_index_numbering` property hidden from UI.
 
 ### Fixed
 
-- Compositor File Output slot names are now updated even when the node already used custom paths, ensuring rendered file names match the example shown in the UI.
+- Smart quote (`\u2019`) in `comp_outputs_non_blocking` description replaced with ASCII apostrophe.
+- Compositor File Output slot names now update even when the node already used custom paths.
+- Inline import of `comp_root_dir` in `jobs.py` moved to top-level imports.
+- `render_stats` handler registered defensively with `hasattr` check for builds that lack it.
 
 ## [1.14.1] - 2025-10-11
 
