@@ -14,9 +14,160 @@ def _tagged(hlist):
 
 
 _marker_cache = {}
+_current_render_state = None
+_STATS_PERCENT_RE = re.compile(r'(\d+(?:\.\d+)?)\s*%')
+_MARKER_TIMER_INTERVAL = 0.35
+_marker_timer_enabled = False
+_rebase_progress = {}
+
+
+def _active_state(scene=None):
+    """Return the add-on state from the given scene or best-known context."""
+    global _current_render_state
+    if scene and hasattr(scene, 'rqm_state'):
+        st = getattr(scene, 'rqm_state', None)
+        if st:
+            _current_render_state = st
+            return st
+    try:
+        context_scene = bpy.context.scene
+    except Exception:
+        context_scene = None
+    if context_scene and hasattr(context_scene, 'rqm_state'):
+        st = getattr(context_scene, 'rqm_state', None)
+        if st:
+            _current_render_state = st
+            return st
+    return _current_render_state
+
+
+def _reset_stats(st, status='Idle'):
+    if not st:
+        return
+    try:
+        st.stats_status = status
+    except Exception:
+        pass
+    try:
+        st.stats_progress = 0.0
+    except Exception:
+        pass
+    try:
+        st.stats_raw = ''
+    except Exception:
+        pass
+    try:
+        st.stats_lines.clear()
+    except Exception:
+        pass
+
+
+def _apply_stats(st, stats):
+    if not st:
+        return
+    text = str(stats or '').replace('\r\n', '\n').strip()
+    previous = getattr(st, 'stats_progress', 0.0)
+    found_progress = False
+    try:
+        st.stats_raw = text
+    except Exception:
+        pass
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    try:
+        st.stats_lines.clear()
+    except Exception:
+        pass
+    if not lines:
+        return
+    try:
+        st.stats_status = lines[0]
+    except Exception:
+        pass
+    for line in lines:
+        if ':' in line:
+            label, value = line.split(':', 1)
+            label = label.strip()
+            value = value.strip()
+        else:
+            label = line
+            value = ''
+        try:
+            entry = st.stats_lines.add()
+            entry.label = label
+            entry.value = value
+        except Exception:
+            pass
+        search_texts = (value, label)
+        for chunk in search_texts:
+            match = _STATS_PERCENT_RE.search(chunk)
+            if match:
+                try:
+                    pct = float(match.group(1)) / 100.0
+                    pct = max(0.0, min(pct, 1.0))
+                    st.stats_progress = pct
+                    found_progress = True
+                    break
+                except Exception:
+                    pass
+    if not found_progress:
+        try:
+            st.stats_progress = previous
+        except Exception:
+            pass
+
+
+def _mark_status(st, status, progress=None):
+    if not st:
+        return
+    try:
+        st.stats_status = status
+    except Exception:
+        pass
+    if progress is not None:
+        try:
+            st.stats_progress = progress
+        except Exception:
+            pass
+
+
+def _marker_timer():
+    global _marker_timer_enabled
+    if not _marker_timer_enabled:
+        return None
+    try:
+        _sync_marker_links()
+    except Exception:
+        pass
+    return _MARKER_TIMER_INTERVAL
+
+
+def _ensure_marker_timer():
+    global _marker_timer_enabled
+    if _marker_timer_enabled:
+        return
+    _marker_timer_enabled = True
+    try:
+        _sync_marker_links()
+    except Exception:
+        pass
+    try:
+        bpy.app.timers.register(
+            _marker_timer,
+            first_interval=_MARKER_TIMER_INTERVAL,
+            persistent=True,
+        )
+    except TypeError:
+        try:
+            bpy.app.timers.register(_marker_timer)
+        except Exception:
+            _marker_timer_enabled = False
+    except Exception:
+        _marker_timer_enabled = False
+
 
 def register_handlers():
     _marker_cache.clear()
+    _rebase_progress.clear()
     if not _tagged(bpy.app.handlers.render_complete):
         def _on_render_complete(*args):
             scene = args[0] if args else None
@@ -24,6 +175,13 @@ def register_handlers():
             if not st:
                 return
             was_render = st.render_in_progress
+            finished_job = None
+            try:
+                idx = st.current_job_index
+                if 0 <= idx < len(st.queue):
+                    finished_job = st.queue[idx]
+            except Exception:
+                finished_job = None
             st.render_in_progress = False
             try:
                 st.stall_polls = 0
@@ -53,6 +211,10 @@ def register_handlers():
                     try:
                         if getattr(job, 'use_animation', False) and getattr(job, 'rebase_numbering', True):
                             _rebase_numbering(job)
+                    except Exception:
+                        pass
+                    try:
+                        _rebase_progress.pop(job.as_pointer(), None)
                     except Exception:
                         pass
             except Exception:
@@ -204,6 +366,7 @@ def unregister_handlers():
         bpy.app.timers.unregister(_marker_timer)
     except Exception:
         pass
+    _rebase_progress.clear()
 
 # ---- Internal helpers ----
 
@@ -225,7 +388,9 @@ _view_pat_variants = [
 _plain_frame_pat = re.compile(r'^(?P<base>.+?)(?P<frame>\d{3,})(?P<ext>\.[^.]+)$')
 _dup_token_sep = re.compile(r'[_\.]+')
 _num_before_suffix_pat = re.compile(r'^(?P<base>.+?)(?P<frame>\d{3,})(?P<tag>_[A-Za-z0-9]+)(?P<ext>\.[^.]+)$')
-_any_frame_pat = re.compile(r'^(?P<prefix>.+?)(?P<tag>_[A-Za-z0-9]+)?\s+(?P<frame>\d{3,})(?P<ext>\.[^.]+)$')
+_any_frame_pat = re.compile(
+    r'^(?P<prefix>.+?)(?P<tag>_[A-Za-z0-9]+)?\s+(?:(?P<src>\d{3,})[-_])?(?P<frame>\d{3,})(?P<ext>\.[^.]+)$'
+)
 
 def _parse_extra_tags(raw: str):
     tags = []
@@ -365,8 +530,17 @@ def _stereo_rename(job):
                     for p in parts:
                         if not dedup or dedup[-1].lower() != p.lower():
                             dedup.append(p)
-                    clean_base = '_'.join(dedup)
-                    new_name = f"{clean_base}_{view_token} {frame}{ext_full}"
+                    tokens = [p for p in dedup if p]
+                    view_part = (view_token or '').strip('_ ')
+                    if view_part:
+                        view_lower = view_part.lower()
+                        tokens = [p for p in tokens if p.lower() != view_lower]
+                        insert_idx = 1 if tokens else 0
+                        tokens.insert(insert_idx, view_part)
+                    clean_base = '_'.join(tokens) if tokens else (view_part or '')
+                    if not clean_base:
+                        clean_base = view_part or 'view'
+                    new_name = f"{clean_base} {frame}{ext_full}"
                     if new_name != name:
                         new_path = os.path.join(root, new_name)
                         try:
@@ -497,9 +671,35 @@ def _compute_src_range(job):
     except Exception:
         return int(job.frame_start), int(job.frame_end)
 
-def _rebase_numbering(job):
+def _rebase_numbering(job, upto_frame=None, focus_frame=None):
     try:
         src_start, src_end = _compute_src_range(job)
+        if src_end < src_start:
+            src_end = src_start
+        if upto_frame is not None:
+            limit = max(src_start, min(int(upto_frame), src_end))
+        else:
+            limit = src_end
+        job_key = None
+        try:
+            job_key = job.as_pointer()
+        except Exception:
+            job_key = None
+        last_done = _rebase_progress.get(job_key, src_start - 1) if job_key is not None else src_start - 1
+        target_frames: set[int] = set()
+        if focus_frame is not None:
+            try:
+                focus_val = int(focus_frame)
+                focus_val = max(src_start, min(focus_val, src_end))
+                if focus_val <= last_done:
+                    target_frames.add(focus_val)
+                else:
+                    limit = max(limit, focus_val)
+            except Exception:
+                pass
+        if not target_frames and limit <= last_done:
+            return
+        include_source = getattr(job, 'include_source_frame_number', True)
         bdir = base_render_dir(job)
         if not os.path.isdir(bdir):
             return
@@ -514,23 +714,47 @@ def _rebase_numbering(job):
                         search_roots.append(p)
             except Exception:
                 pass
-        # Go through files that end with ' <frame>.ext' (with optional _TAG)
+        processed_high = last_done
         for root in search_roots:
             try:
                 for fname in os.listdir(root):
                     m = _any_frame_pat.match(fname)
                     if not m:
                         continue
-                    frame_no = int(m.group('frame'))
-                    if frame_no < src_start or frame_no > src_end:
+                    raw_frame = int(m.group('frame'))
+                    src_component = m.group('src')
+                    if src_component:
+                        source_frame = int(src_component)
+                        local_index = raw_frame
+                    else:
+                        source_frame = raw_frame
+                        local_index = source_frame - src_start
+                    if source_frame < src_start or source_frame > src_end:
                         continue
-                    new_index = frame_no - src_start
-                    width = len(m.group('frame'))
-                    new_frame_str = str(new_index).zfill(width)
+                    if target_frames:
+                        if source_frame not in target_frames:
+                            continue
+                    else:
+                        if source_frame > limit or source_frame <= last_done:
+                            continue
+                    if local_index < 0:
+                        local_index = source_frame - src_start
+                    local_index = max(0, local_index)
+                    local_width = max(len(m.group('frame')), len(str(local_index)))
+                    new_local = str(local_index).zfill(local_width)
                     prefix = m.group('prefix')
                     tag = m.group('tag') or ''
                     ext = m.group('ext')
-                    new_name = f"{prefix}{tag} {new_frame_str}{ext}"
+                    if not target_frames:
+                        processed_high = max(processed_high, source_frame)
+                    if include_source:
+                        src_width_hint = len(src_component) if src_component else 0
+                        src_width = max(src_width_hint, len(str(source_frame)))
+                        src_label = str(source_frame).zfill(src_width)
+                        frame_token = f"{src_label}-{new_local}"
+                    else:
+                        frame_token = new_local
+                    new_name = f"{prefix}{tag} {frame_token}{ext}"
                     if new_name == fname:
                         continue
                     src_path = os.path.join(root, fname)
@@ -543,5 +767,7 @@ def _rebase_numbering(job):
                         pass
             except Exception:
                 pass
+        if job_key is not None and not target_frames and processed_high > last_done:
+            _rebase_progress[job_key] = processed_high
     except Exception:
         pass
