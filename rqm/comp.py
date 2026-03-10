@@ -4,7 +4,7 @@ import os
 import bpy  # type: ignore
 from .utils import (
     _sanitize_component, _sanitize_subpath, _tokens,
-    _ensure_dir, _scene_output_dir, _valid_node_format, apply_encoding_settings
+    _ensure_dir, _scene_output_dir, _valid_node_format
 )
 from .properties import RQM_CompOutput, RQM_Job
 
@@ -38,21 +38,44 @@ def _append_job_suffix(folder: str, job: RQM_Job, token: str | None = None) -> s
     Ensure the final folder component follows the job-prefixed convention when enabled.
     token: optional raw tail name to prefer over the existing folder basename.
     """
-    stripped = (folder or '').rstrip('/\\')
+    if _is_blender5():
+        # Ensure a compositing node group exists
+        if getattr(scn, 'compositing_node_group', None) is None:
+            try:
+                # Blender auto-creates one when the user opens the compositor;
+                # we can also create one via bpy.data.node_groups.new()
+                import bpy
+                ng = bpy.data.node_groups.new(f'{scn.name}_Compositing', 'CompositorNodeTree')
+                scn.compositing_node_group = ng
+            except Exception:
+                pass
+    else:
+        try:
+            if hasattr(scn, 'use_nodes'):
+                if not scn.use_nodes:
+                    scn.use_nodes = True
+        except Exception:
+            pass
+
+
+# ---- Directory helpers ----
+
+def _append_job_suffix(folder: str, job: RQM_Job) -> str:
+    if not getattr(job, 'suffix_output_folders_with_job', False):
+        return folder
+    safe_job = _sanitize_component(job.name or 'job')
+    if not safe_job:
+        return folder
+    stripped = folder.rstrip('/\\')
     if not stripped:
         return folder
+    tail = os.path.basename(stripped)
+    if not tail:
+        return folder
+    if tail.lower() == safe_job.lower() or tail.lower().endswith('_' + safe_job.lower()):
+        return folder
     parent = os.path.dirname(stripped)
-    existing_tail = os.path.basename(stripped)
-    safe_tail = _sanitize_component(token or existing_tail)
-    safe_job = _sanitize_component(job.name or 'job')
-    if not safe_tail:
-        safe_tail = existing_tail or 'output'
-    if getattr(job, 'suffix_output_folders_with_job', False):
-        # New convention: prefix tail with job name unless already present
-        job_lower = safe_job.lower()
-        tail_lower = safe_tail.lower()
-        if not tail_lower.startswith(job_lower):
-            safe_tail = f'{safe_job}_{safe_tail}'
+    new_tail = f'{tail}_{safe_job}'
     if parent:
         return os.path.join(parent, safe_tail)
     return safe_tail
@@ -234,27 +257,21 @@ def resolve_base_dir(scn, job: RQM_Job, out: RQM_CompOutput, node_name: str):
         if not out.base_file:
             return None, "You chose 'Folder of a chosen file' but no file was picked."
         base_dir = os.path.dirname(bpy.path.abspath(out.base_file))
-    leaf_hint = None
-    node_hint = None
+    base_dir = _append_job_suffix(base_dir, job)
+
     if out.use_node_named_subfolder:
         node_sub = _sanitize_component(node_name or 'Composite')
         base_dir = os.path.join(base_dir, node_sub)
-        node_hint = node_sub
-        leaf_hint = node_sub
     if out.extra_subfolder.strip():
         raw = _tokens(out.extra_subfolder, scn, job.name, job.camera_name, node_name=node_name).strip()
         sub = _sanitize_subpath(raw)
         if sub:
             base_dir = os.path.join(base_dir, sub)
-            leaf_hint = os.path.basename(sub.rstrip('/\\'))
-    if out.base_source == 'JOB_OUTPUT':
-        token = leaf_hint or node_hint or 'comp'
-        base_dir = _append_job_suffix(base_dir, job, token)
     return base_dir, None
 
 def _ensure_min_slot(node, fallback_name: str):
-    if len(node.file_slots) == 0:
-        node.file_slots.new(fallback_name or 'render')
+    if _node_slot_count(node) == 0:
+        _new_node_slot(node, fallback_name or 'render')
 
 def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
     node, err = get_file_output_node(scn, out)
@@ -265,7 +282,7 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
         return False, err
     base_dir = bpy.path.abspath(base_dir or '//')
     try:
-        node.base_path = base_dir
+        _set_node_base_path(node, base_dir)
     except Exception as e:
         return False, f"Couldn't set File Output base path: {e}".strip()
     if out.ensure_dirs:
@@ -381,3 +398,32 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
     except Exception:
         pass
     return True, 'OK'
+
+
+def get_slot_subdirs(scn, job: RQM_Job, out: RQM_CompOutput):
+    """Return a list of full directory paths for each slot in the File Output node.
+
+    This enables pre-creating the exact folder tree before rendering starts.
+    """
+    dirs = []
+    node, err = get_file_output_node(scn, out)
+    if not node:
+        return dirs
+    base_dir, err = resolve_base_dir(scn, job, out, node.name)
+    if err or not base_dir:
+        return dirs
+    base_dir = bpy.path.abspath(base_dir or '//')
+    dirs.append(base_dir)
+    # Each slot may define a sub-path that becomes a subdirectory
+    try:
+        for slot in _get_node_slots(node):
+            sp = _get_slot_path(slot).rstrip('/ \\')
+            if not sp or sp == '.':
+                continue
+            # Slot paths can contain directory separators (e.g. "passes/diffuse")
+            slot_dir = os.path.join(base_dir, os.path.dirname(sp)) if os.path.dirname(sp) else base_dir
+            if slot_dir not in dirs:
+                dirs.append(slot_dir)
+    except Exception:
+        pass
+    return dirs

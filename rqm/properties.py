@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import os
+
 import bpy  # type: ignore  # Blender runtime provided
 from bpy.props import (  # type: ignore
     BoolProperty,
     CollectionProperty,
     EnumProperty,
-    FloatProperty,
     IntProperty,
     PointerProperty,
     StringProperty,
@@ -16,6 +17,7 @@ from bpy.types import PropertyGroup  # type: ignore
 
 from .utils import (
     FILE_FORMAT_ITEMS,
+    _sanitize_component,
     camera_items,
     engine_items,
     scene_items,
@@ -23,188 +25,12 @@ from .utils import (
     view_layer_items,
 )
 
-__all__ = [
-    'RQM_Tag',
-    'RQM_EncodingSettings',
-    'RQM_CompOutput',
-    'RQM_RenderStat',
-    'RQM_Job',
-    'RQM_State',
-    'get_job_view_layer_names',
-    'set_job_view_layer_names',
-    'sync_job_view_layers',
-]
-
-
-def _selected_view_layer_ids(job):
-    raw_sel = getattr(job, 'view_layers', set())
-    if isinstance(raw_sel, str):
-        return [raw_sel] if raw_sel else []
-    try:
-        return [item for item in raw_sel if item]
-    except TypeError:
-        try:
-            return list(raw_sel)
-        except Exception:
-            return []
-
-
-def _split_view_layer_names(raw: str):
-    return [name for name in (raw or '').split('|') if name]
-
-
-def _store_view_layer_names(job, names):
-    unique = []
-    for name in names:
-        if name and name not in unique:
-            unique.append(name)
-    job.view_layer_selection = '|'.join(unique)
-
-
-def _names_from_identifiers(identifiers, mapping):
-    names = []
-    for ident in identifiers:
-        layer = mapping.get(ident)
-        if layer:
-            names.append(layer.name)
-    return names
-
-
-def _identifiers_from_names(names, mapping):
-    name_to_ident = {layer.name: ident for ident, layer in mapping.items()}
-    identifiers = []
-    for name in names:
-        ident = name_to_ident.get(name)
-        if ident and ident not in identifiers:
-            identifiers.append(ident)
-    return identifiers
-
-
-def _fallback_view_layer_names(mapping):
-    names = []
-    for layer in mapping.values():
-        try:
-            if getattr(layer, 'use', True):
-                names.append(layer.name)
-        except Exception:
-            names.append(layer.name)
-    if names:
-        return names
-    for layer in mapping.values():
-        return [layer.name]
-    return []
-
-
-def _assign_view_layers(job, identifiers):
-    identifiers = [ident for ident in identifiers if ident]
-    if not identifiers:
-        try:
-            job.view_layers = set()
-        except Exception:
-            pass
-        return
-    current = set()
-    for ident in identifiers:
-        current.add(ident)
-        try:
-            job.view_layers = set(current)
-        except Exception:
-            pass
-
-
-def set_job_view_layer_names(job, scn, names, mapping=None):
-    mapping = mapping or view_layer_identifier_map(scn)
-    if not mapping:
-        _store_view_layer_names(job, [])
-        _assign_view_layers(job, [])
-        return []
-    cleaned = []
-    name_to_ident = {layer.name: ident for ident, layer in mapping.items()}
-    for name in names:
-        if name and name in name_to_ident and name not in cleaned:
-            cleaned.append(name)
-    _store_view_layer_names(job, cleaned)
-    _assign_view_layers(job, _identifiers_from_names(cleaned, mapping))
-    return cleaned
-
-
-def sync_job_view_layers(job, scn, mapping=None):
-    mapping = mapping or view_layer_identifier_map(scn)
-    if not mapping:
-        _store_view_layer_names(job, [])
-        _assign_view_layers(job, [])
-        return []
-    name_lookup = {layer.name: ident for ident, layer in mapping.items()}
-    stored_names = [
-        name for name in _split_view_layer_names(getattr(job, 'view_layer_selection', ''))
-        if name in name_lookup
-    ]
-    identifiers = _selected_view_layer_ids(job)
-    had_selection = bool(stored_names or identifiers)
-    if not stored_names and identifiers:
-        stored_names = _names_from_identifiers(identifiers, mapping)
-    if not stored_names and had_selection:
-        stored_names = _fallback_view_layer_names(mapping)
-    _store_view_layer_names(job, stored_names)
-    _assign_view_layers(job, [name_lookup[name] for name in stored_names])
-    return stored_names
-
-
-def get_job_view_layer_names(job):
-    return _split_view_layer_names(getattr(job, 'view_layer_selection', ''))
+__all__ = ['RQM_CompOutput', 'RQM_Job', 'RQM_State', 'RQM_Tag']
 
 
 class RQM_Tag(PropertyGroup):
     name: StringProperty(name='Tag')
     enabled: BoolProperty(name='Use', default=True)
-
-
-class RQM_EncodingSettings(PropertyGroup):
-    color_mode: EnumProperty(
-        name='Color Mode',
-        items=[
-            ('BW', 'BW', 'Monochrome output'),
-            ('RGB', 'RGB', 'RGB color channels'),
-            ('RGBA', 'RGBA', 'RGB with alpha'),
-        ],
-        default='RGB',
-    )
-    color_depth: EnumProperty(
-        name='Color Depth',
-        items=[
-            ('8', '8 bit', '8-bit per channel'),
-            ('16', '16 bit', '16-bit per channel'),
-            ('32', '32 bit', '32-bit per channel (floating point)'),
-        ],
-        default='8',
-    )
-    compression: IntProperty(
-        name='Compression',
-        default=15,
-        min=0,
-        max=100,
-        description='Compression level for PNG/TIFF/EXR formats (0 = none, 100 = maximum)',
-    )
-    quality: IntProperty(
-        name='Quality',
-        default=90,
-        min=0,
-        max=100,
-        description='Quality for JPEG outputs (100 = best)',
-    )
-    exr_codec: EnumProperty(
-        name='EXR Codec',
-        items=[
-            ('ZIP', 'ZIP', 'ZIP compression'),
-            ('ZIPS', 'ZIPS', 'ZIP per scanline'),
-            ('PIZ', 'PIZ', 'PIZ wavelet compression'),
-            ('PXR24', 'PXR24', 'Pixar 24-bit compression'),
-            ('DWAA', 'DWAA', 'DreamWorks fast lossy compression'),
-            ('DWAB', 'DWAB', 'DreamWorks high-quality compression'),
-            ('NONE', 'None', 'No compression'),
-        ],
-        default='ZIP',
-    )
 
 
 class RQM_CompOutput(PropertyGroup):
@@ -227,7 +53,7 @@ class RQM_CompOutput(PropertyGroup):
         name='Base folder',
         items=[
             ('JOB_OUTPUT', 'Job output folder', 'Use the job\'s Render folder'),
-            ('SCENE_OUTPUT', 'Scene output folder', 'Use Output Properties \u2192 Output directory'),
+            ('SCENE_OUTPUT', 'Scene output folder', 'Use Output Properties → Output directory'),
             ('FROM_FILE', 'Folder of a chosen file', 'Pick any file; we use its folder'),
         ],
         default='JOB_OUTPUT',
@@ -240,32 +66,7 @@ class RQM_CompOutput(PropertyGroup):
         description='Tokens OK: {scene} {camera} {job} {node}',
     )
     ensure_dirs: BoolProperty(name='Create folders if missing', default=True)
-    override_node_format: BoolProperty(name='Use job render format', default=True)
-    use_custom_encoding: BoolProperty(
-        name='Override encoding',
-        default=False,
-        description='Apply custom encoding settings to this File Output node',
-    )
-    encoding: PointerProperty(type=RQM_EncodingSettings)
-    file_basename: StringProperty(
-        name='Filename prefix',
-        default='',
-        description=(
-            'Optional filename prefix for files from this File Output node. '
-            'Tokens OK: {scene} {camera} {job} {node}. Leave blank to follow the job settings.'
-        ),
-    )
-    last_auto_prefix: StringProperty(
-        name='Last auto prefix',
-        default='',
-        description='Internal: prefix we last pushed onto File Output slots',
-        options={'HIDDEN'},
-    )
-
-
-class RQM_RenderStat(PropertyGroup):
-    label: StringProperty(name='Label', default='')
-    value: StringProperty(name='Value', default='')
+    override_node_format: BoolProperty(name='Node format = Render format', default=True)
 
 
 def _on_job_scene_change(self, context):
@@ -279,26 +80,50 @@ def _on_job_scene_change(self, context):
             self.camera_name = default_cam.name if default_cam else ''
         mapping = view_layer_identifier_map(scn)
         if mapping:
-            sync_job_view_layers(self, scn, mapping)
+            raw_sel = getattr(self, 'view_layers', set())
+            if isinstance(raw_sel, str):
+                current = {raw_sel} if raw_sel else set()
+            else:
+                current = set(raw_sel)
+            preserved = [ident for ident in current if ident in mapping]
+            if preserved:
+                target_ids = preserved
+            else:
+                fallback = []
+                for ident, layer in mapping.items():
+                    try:
+                        if getattr(layer, 'use', True):
+                            fallback.append(ident)
+                    except Exception:
+                        fallback.append(ident)
+                target_ids = fallback
+            try:
+                self.view_layers = set(target_ids)
+            except Exception:
+                if target_ids:
+                    for ident in target_ids:
+                        try:
+                            self.view_layers = {ident}
+                        except Exception:
+                            continue
+                        else:
+                            break
+                else:
+                    try:
+                        self.view_layers = set()
+                    except Exception:
+                        pass
         else:
-            _store_view_layer_names(self, [])
-            _assign_view_layers(self, [])
+            try:
+                self.view_layers = set()
+            except Exception:
+                pass
     else:
         self.camera_name = ''
-        _store_view_layer_names(self, [])
-        _assign_view_layers(self, [])
-
-
-def _on_view_layers_change(self, context):
-    scene_name = getattr(self, 'scene_name', '')
-    scn = bpy.data.scenes.get(scene_name) if scene_name else None
-    mapping = view_layer_identifier_map(scn) if scn else {}
-    if not mapping:
-        _store_view_layer_names(self, [])
-        return
-    identifiers = _selected_view_layer_ids(self)
-    names = _names_from_identifiers(identifiers, mapping)
-    _store_view_layer_names(self, names)
+        try:
+            self.view_layers = set()
+        except Exception:
+            pass
 
 
 class RQM_Job(PropertyGroup):
@@ -313,12 +138,6 @@ class RQM_Job(PropertyGroup):
         items=view_layer_items,
         options={'ENUM_FLAG'},
         description='View layers to enable for this job (empty = scene defaults)',
-        update=_on_view_layers_change,
-    )
-    view_layer_selection: StringProperty(
-        name='View Layer Selection (names)',
-        default='',
-        options={'HIDDEN'},
     )
     engine: EnumProperty(name='Engine', items=engine_items)
 
@@ -370,20 +189,12 @@ class RQM_Job(PropertyGroup):
     file_basename: StringProperty(
         name='Render filename',
         default='render',
-        description=(
-            "Prefix for main render files (sanitised). Example: 'beauty' -> beauty0001.png. "
-            'Leave blank to derive from folders.'
-        ),
-    )
-    prefix_files_with_job_name: BoolProperty(
-        name='Prefix filenames with job name',
-        default=True,
-        description='When enabled, final filenames are prefixed with the job name (Job_render 0001.png)',
+        description="Prefix for main render files (sanitised). Example: 'beauty' -> beauty0001.png",
     )
     suffix_output_folders_with_job: BoolProperty(
-        name='Prefix folders with job name',
+        name='Suffix folders with job name',
         default=False,
-        description='Name generated folders like Job_base or Job_comp instead of appending the job name',
+        description='Append the job name to generated render and compositor folders',
     )
     rebase_numbering: BoolProperty(
         name='Number files from 0',
@@ -393,15 +204,6 @@ class RQM_Job(PropertyGroup):
             'for this job, regardless of timeline frame indices'
         ),
     )
-    include_source_frame_number: BoolProperty(
-        name='Include source frame number',
-        default=True,
-        description=(
-            'When rebasing animation numbering, prefix the rebased value with the '
-            'original timeline frame (e.g. 0100-0000). Helps when resuming or fixing frames.'
-        ),
-    )
-    encoding: PointerProperty(type=RQM_EncodingSettings)
 
     use_comp_outputs: BoolProperty(name='Use Compositor outputs', default=False)
     comp_outputs_non_blocking: BoolProperty(
@@ -495,24 +297,17 @@ class RQM_State(PropertyGroup):
     running: BoolProperty(default=False)
     current_job_index: IntProperty(default=-1)
     render_in_progress: BoolProperty(default=False)
-    stall_polls: IntProperty(default=0, options={'HIDDEN'})
     job_filter: StringProperty(name='Filter Jobs', default='')
-    ui_prev_tab: StringProperty(default='QUEUE', options={'HIDDEN'})
-    ui_tab: EnumProperty(
-        name='Active Tab',
-        items=[
-            ('QUEUE', 'Queue', 'Manage render queue jobs'),
-            ('STATS', 'Render Stats', 'View live render statistics'),
-        ],
-        default='QUEUE',
+    indirect_target_view_layer: StringProperty(
+        name='View Layer',
+        default='',
+        description='Which view layer the indirect-only toggle operates on (empty = active view layer)',
     )
-    stats_status: StringProperty(name='Render Status', default='Idle')
-    stats_progress: FloatProperty(
-        name='Progress',
-        default=0.0,
-        min=0.0,
-        max=1.0,
-        subtype='FACTOR',
+    indirect_disabled_collections: StringProperty(
+        name='Indirect-disabled collections',
+        default='',
+        description='Internal: tracks which collections were excluded by the indirect-only toggle',
+        options={'HIDDEN'},
     )
     stats_raw: StringProperty(name='Raw Stats', default='', options={'HIDDEN'})
     stats_lines: CollectionProperty(type=RQM_RenderStat)

@@ -10,13 +10,12 @@ import bpy  # type: ignore
 from bpy.props import EnumProperty, IntProperty  # type: ignore
 from bpy.types import Operator  # type: ignore
 
+from .comp import base_render_dir, comp_root_dir, get_slot_subdirs, resolve_base_dir
 from .handlers import register_handlers
 from .jobs import apply_job
-from .properties import RQM_Job, set_job_view_layer_names, sync_job_view_layers
+from .properties import RQM_Job
 from .state import get_state
-from .utils import _sanitize_component, view_layer_identifier_map
-
-_STALL_POLL_THRESHOLD = 12
+from .utils import _ensure_dir, _sanitize_component, view_layer_identifier_map
 
 
 # ---- Local item callbacks (avoid lambda for Blender EnumProperty) ----
@@ -44,14 +43,42 @@ def _prefill_job_view_layers(job, scn, mapping, fallback_layer):
         return
     identifiers = _enabled_view_layer_ids(mapping)
     if identifiers:
-        names = [mapping[ident].name for ident in identifiers if ident in mapping]
-        set_job_view_layer_names(job, scn, names, mapping)
+        _set_job_view_layers(job, mapping, identifiers)
         return
     if not fallback_layer:
         return
     fallback_name = getattr(fallback_layer, 'name', None)
-    if fallback_name:
-        set_job_view_layer_names(job, scn, [fallback_name], mapping)
+    if not fallback_name:
+        return
+    identifier = next(
+        (ident for ident, layer in mapping.items() if getattr(layer, 'name', None) == fallback_name),
+        '',
+    )
+    if identifier:
+        _set_job_view_layers(job, mapping, [identifier])
+
+
+
+def _set_job_view_layers(job, mapping, identifiers):
+    if not hasattr(job, 'view_layers'):
+        return
+    if isinstance(identifiers, str):
+        identifiers = [identifiers] if identifiers else []
+    else:
+        identifiers = list(identifiers) if identifiers else []
+    valid = [ident for ident in identifiers if ident in mapping]
+    if not valid:
+        return
+    try:
+        job.view_layers = set(valid)
+    except Exception:
+        for ident in valid:
+            try:
+                job.view_layers = {ident}
+            except Exception:
+                continue
+            else:
+                break
 
 
 __all__ = [
@@ -92,7 +119,7 @@ class RQM_OT_AddFromCurrent(Operator):
                 fallback_layer = context.view_layer if context.view_layer else None
             except Exception:
                 fallback_layer = None
-            _prefill_job_view_layers(job, scn, mapping, fallback_layer)
+            _prefill_job_view_layers(job, mapping, fallback_layer)
         job.res_x = scn.render.resolution_x
         job.res_y = scn.render.resolution_y
         job.percent = scn.render.resolution_percentage
@@ -171,7 +198,7 @@ class RQM_OT_AddCamerasInScene(Operator):
                         active_layer = scn.view_layers[0]
                     except Exception:
                         active_layer = None
-                _prefill_job_view_layers(job, scn, mapping, active_layer)
+                _prefill_job_view_layers(job, mapping, active_layer)
             job.res_x = scn.render.resolution_x
             job.res_y = scn.render.resolution_y
             job.percent = scn.render.resolution_percentage
@@ -261,12 +288,10 @@ class RQM_OT_DuplicateJob(Operator):
             'scene_name',
             'camera_name',
             'view_layers',
-            'view_layer_selection',
             'engine',
             'res_x',
             'res_y',
             'percent',
-            'use_persistent_data',
             'use_animation',
             'frame_start',
             'frame_end',
@@ -280,10 +305,8 @@ class RQM_OT_DuplicateJob(Operator):
             'file_format',
             'output_path',
             'file_basename',
-            'prefix_files_with_job_name',
             'suffix_output_folders_with_job',
             'rebase_numbering',
-            'include_source_frame_number',
             'use_comp_outputs',
             'comp_outputs_non_blocking',
             'use_stereoscopy',
@@ -311,35 +334,9 @@ class RQM_OT_DuplicateJob(Operator):
                     'extra_subfolder',
                     'ensure_dirs',
                     'override_node_format',
-                    'file_basename',
                 ]:
                     if hasattr(out, a):
                         setattr(new_out, a, getattr(out, a))
-                if hasattr(new_out, 'use_custom_encoding') and hasattr(out, 'use_custom_encoding'):
-                    new_out.use_custom_encoding = out.use_custom_encoding
-                if hasattr(new_out, 'encoding') and hasattr(out, 'encoding'):
-                    try:
-                        new_out.encoding.color_mode = out.encoding.color_mode
-                        new_out.encoding.color_depth = out.encoding.color_depth
-                        new_out.encoding.compression = out.encoding.compression
-                        new_out.encoding.quality = out.encoding.quality
-                        new_out.encoding.exr_codec = out.encoding.exr_codec
-                    except Exception:
-                        pass
-        # Sync encoding
-        if hasattr(dst, 'encoding') and hasattr(src, 'encoding'):
-            try:
-                dst.encoding.color_mode = src.encoding.color_mode
-                dst.encoding.color_depth = src.encoding.color_depth
-                dst.encoding.compression = src.encoding.compression
-                dst.encoding.quality = src.encoding.quality
-                dst.encoding.exr_codec = src.encoding.exr_codec
-            except Exception:
-                pass
-        # Ensure view layer storage aligns with new scene
-        target_scene = bpy.data.scenes.get(dst.scene_name) if dst.scene_name else None
-        if target_scene:
-            sync_job_view_layers(dst, target_scene)
         # Copy tag collection
         if hasattr(src, 'stereo_tags'):
             for t in src.stereo_tags:
@@ -399,22 +396,9 @@ class RQM_OT_StartQueue(Operator):
             else:
                 job.status = 'SKIPPED'
         register_handlers()
-        st.ui_prev_tab = getattr(st, 'ui_tab', 'QUEUE')
-        st.ui_tab = 'STATS'
         st.running = True
         st.current_job_index = 0
         st.render_in_progress = False
-        st.stall_polls = 0
-        try:
-            st.stats_lines.clear()
-        except Exception:
-            pass
-        try:
-            st.stats_progress = 0.0
-            st.stats_status = 'Waiting for Blender render'
-            st.stats_raw = ''
-        except Exception:
-            pass
         context.window_manager.modal_handler_add(self)
         self.report({'INFO'}, 'Render queue started.')
         return {'RUNNING_MODAL'}
@@ -434,18 +418,14 @@ class RQM_OT_StartQueue(Operator):
         if st.current_job_index >= len(st.queue):
             st.running = False
             st.current_job_index = -1
-            st.stall_polls = 0
-            try:
-                st.ui_tab = getattr(st, 'ui_prev_tab', 'QUEUE') or 'QUEUE'
-            except Exception:
-                st.ui_tab = 'QUEUE'
             self.report({'INFO'}, 'Queue complete.')
             return {'FINISHED'}
         # Fallback: if we think a render is in progress but Blender reports none, advance
         if st.render_in_progress:
-            job_running = True
+            stalled = False
             try:
-                job_running = bpy.app.is_job_running('RENDER')
+                if not bpy.app.is_job_running('RENDER'):
+                    stalled = True
             except Exception:
                 job_running = True
             if job_running:
@@ -470,7 +450,6 @@ class RQM_OT_StartQueue(Operator):
             return {'PASS_THROUGH'}
         job.status = 'RENDERING'
         st.render_in_progress = True
-        st.stall_polls = 0
         try:
             # Use EXEC_DEFAULT to avoid needing the Image Editor
             # foreground; more reliable unattended.

@@ -8,7 +8,7 @@ Render Queue Manager X is a modular toolkit for orchestrating Blender renders au
 
 ---
 
-## Features at a Glance
+## ✨ Features
 
 - **Queue-Based Workflow**
   - Capture scene, camera, frame range, engine, and resolution per job.
@@ -87,16 +87,17 @@ Each panel section is collapsible so you can focus on the controls you need. Hov
 - Filter the queue list to quickly find jobs by name, scene, camera, or notes.
 - Rebase animation numbering so exported filenames always start at frame `0000`.
 
-### Compositor Outputs
+## 🧩 Compositor Outputs
 
-- Add multiple File Output bindings per job with optional creation if missing.
-- Pick base paths from the job folder, the scene output, or a manual file reference.
-- Apply node-named subfolders, custom tokens (`{scene}`, `{camera}`, `{job}`, `{node}`), and per-output encoding overrides.
+When enabled:
 
-### Marker-Linked Ranges
+1. Add one or more outputs.
+2. Choose (or auto-create) File Output nodes.
+3. Optionally pick base source: Job output folder, Scene output folder, or a folder inferred from a chosen file.
+4. Optional node-named and custom token subfolders (`{scene} {camera} {job} {node}`).
+5. Slots with default/empty paths are renamed to `<job>_<basename>`.
 
-- Link start/end markers to keep queue entries synced to timeline edits.
-- Offsets let you include handles while still exporting remapped frame numbers.
+Note: The previous “Detect View Tags” utility was removed. Use the free‑text Extra View Tags field to specify additional tags if needed.
 
 ### Encoding Controls
 
@@ -176,13 +177,4 @@ Bug reports, UX ideas, and documentation fixes are all welcome.
 
 ---
 
-## License
-
-Render Queue Manager X is distributed under the **GNU General Public License v3.0 or later (GPL-3.0-or-later)**. See `LICENSE` for full terms.
-
----
-
-## Credits
-
-- **Author:** Xnom3d
-- **Contributors:** Add your name via pull request!
+Made for production batch rendering and extension. Enjoy.

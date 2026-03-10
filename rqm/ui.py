@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 import bpy  # type: ignore
 from bpy.types import Panel, UIList  # type: ignore
 
@@ -288,7 +286,7 @@ class RQM_UL_Tags(UIList):
 
 
 class RQM_PT_Panel(Panel):
-    bl_label = 'Render Queue Manager X'
+    bl_label = 'Render Queue Manager'
     bl_idname = 'RQM_PT_panel'
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
@@ -299,15 +297,8 @@ class RQM_PT_Panel(Panel):
         st = get_state(context)
         if st is None:
             box = layout.box()
-            box.label(text='Render Queue Manager X not initialized.', icon='ERROR')
+            box.label(text='Render Queue Manager not initialized.', icon='ERROR')
             box.label(text='Try disabling & re-enabling the add-on.')
-            return
-
-        tab_row = layout.row(align=True)
-        tab_row.prop(st, 'ui_tab', expand=True)
-        if getattr(st, 'ui_tab', 'QUEUE') == 'STATS':
-            _draw_stats_tab(layout, st)
-            _draw_queue_controls(layout, st)
             return
 
         header = layout.row(align=True)
@@ -357,24 +348,17 @@ class RQM_PT_Panel(Panel):
             if hasattr(job, 'view_layers'):
                 # Cleaner multi-select as a dropdown with dynamic label
                 row = box.row()
-                selected_count = 0
                 try:
-                    selected_names = [name for name in get_job_view_layer_names(job) if name]
-                    selected_count = len(selected_names)
+                    sel = getattr(job, 'view_layers', set())
+                    if isinstance(sel, str):
+                        selected = {sel} if sel else set()
+                    else:
+                        selected = set(sel)
                 except Exception:
-                    selected_names = []
-                if not selected_count:
-                    try:
-                        raw_sel = getattr(job, 'view_layers', set())
-                        if isinstance(raw_sel, str):
-                            selected_count = 1 if raw_sel else 0
-                        else:
-                            selected_count = len({item for item in raw_sel if item})
-                    except Exception:
-                        selected_count = 0
+                    selected = set()
                 label = 'View Layers'
-                if selected_count:
-                    label = f'View Layers ({selected_count})'
+                if selected:
+                    label = f'View Layers ({len(selected)})'
                 # prop_menu_enum opens a dropdown menu where items can be toggled (ENUM_FLAG)
                 row.prop_menu_enum(job, 'view_layers', text=label, icon='DOWNARROW_HLT')
 
@@ -398,6 +382,13 @@ class RQM_PT_Panel(Panel):
             rr.prop(job, 'res_x')
             rr.prop(job, 'res_y')
             rr.prop(job, 'percent')
+            col.prop(job, 'use_margin')
+            if getattr(job, 'use_margin', False):
+                mr = col.row(align=True)
+                mr.prop(job, 'margin_pixels')
+                eff_x = job.res_x + (job.margin_pixels * 2)
+                eff_y = job.res_y + (job.margin_pixels * 2)
+                mr.label(text=f'= {eff_x} × {eff_y}')
 
             col.separator()
             col.prop(job, 'use_animation')
@@ -446,27 +437,28 @@ class RQM_PT_Panel(Panel):
                 col.prop(job, 'suffix_output_folders_with_job')
             if job.use_animation and hasattr(job, 'rebase_numbering'):
                 col.prop(job, 'rebase_numbering')
-                if getattr(job, 'rebase_numbering', False) and hasattr(job, 'include_source_frame_number'):
-                    col.prop(job, 'include_source_frame_number')
 
-            col.separator()
-            col.label(text='Stereoscopy', icon='CAMERA_STEREO')
-            col.prop(job, 'use_stereoscopy')
+            # --- Stereoscopy ---
+            stereo_box = box.box()
+            stereo_box.label(text='Stereoscopy / Multi-View', icon='CAMERA_STEREO')
+            stereo_box.prop(job, 'use_stereoscopy')
             if getattr(job, 'use_stereoscopy', False):
                 if hasattr(job, 'stereo_views_format'):
-                    col.prop(job, 'stereo_views_format', text='Views')
-                col.prop(job, 'stereo_extra_tags')
-                col.prop(job, 'stereo_keep_plain')
-                tag_row = col.row(align=True)
+                    row = stereo_box.row()
+                    row.prop(job, 'stereo_views_format', expand=True)
+                stereo_box.prop(job, 'stereo_keep_plain')
+                stereo_box.separator()
+                stereo_box.label(text='Extra View Tags', icon='VIEWLAYER_ACTIVE')
+                stereo_box.prop(job, 'stereo_extra_tags', text='')
                 if hasattr(job, 'use_tag_collection'):
-                    tag_row.prop(job, 'use_tag_collection', text='Use Tag List')
+                    stereo_box.prop(job, 'use_tag_collection', text='Use Tag List')
                 if getattr(job, 'use_tag_collection', False):
-                    tag_box = col.box()
-                    tag_box.template_list(
+                    stereo_box.template_list(
                         'RQM_UL_Tags', '', job, 'stereo_tags', job, 'stereo_tags_index', rows=3
                     )
 
-            col.separator()
+            # Start a fresh column for Compositor Outputs (after the stereo box)
+            col = box.column(align=True)
             col.label(text='Compositor Outputs', icon='NODE_COMPOSITING')
             col.prop(job, 'use_comp_outputs')
             if job.use_comp_outputs:
@@ -502,19 +494,6 @@ class RQM_PT_Panel(Panel):
                     )
                     sub.prop(out, 'create_if_missing')
                     sub.prop(out, 'override_node_format')
-                    sub.prop(out, 'use_custom_encoding')
-                    enc_info = sub.box()
-                    if out.use_custom_encoding:
-                        enc_info.label(text='Encoding', icon='COLOR')
-                        _draw_encoding_controls(
-                            enc_info,
-                            getattr(out, 'encoding', None),
-                            job.file_format if out.override_node_format else job.file_format,
-                        )
-                    elif out.override_node_format:
-                        enc_info.label(text='Follows job encoding', icon='INFO')
-                    else:
-                        enc_info.label(text='Uses node encoding', icon='INFO')
                     sub.separator()
                     sub.label(text='Save location', icon='FILE_FOLDER')
                     sub.prop(out, 'base_source', text='Base')
@@ -523,8 +502,86 @@ class RQM_PT_Panel(Panel):
                     sub.prop(out, 'use_node_named_subfolder')
                     sub.prop(out, 'extra_subfolder')
                     sub.prop(out, 'ensure_dirs')
-                    preview = _compositor_output_preview(job, out, scn_for_job)
-                    if preview:
-                        sub.label(text=f'Example file: {preview}', icon='FILE')
 
-        _draw_queue_controls(layout, st)
+        layout.separator()
+        controls = layout.row(align=True)
+        if not st.running:
+            controls.operator('rqm.start_queue', icon='RENDER_ANIMATION')
+            controls.operator('rqm.create_folders', icon='FILE_FOLDER')
+        else:
+            controls.operator('rqm.stop_queue', icon='CANCEL')
+        if st.running and st.current_job_index >= 0 and len(st.queue) > 0:
+            total = len(st.queue)
+            display_idx = min(max(st.current_job_index, 0) + 1, total)
+            layout.label(text=f'Running. Job {display_idx}/{total}')
+        else:
+            layout.label(text='Idle')
+
+        layout.separator()
+        indirect_box = layout.box()
+        indirect_box.label(text='Indirect-Only Collections', icon='OUTLINER_OB_GROUP_INSTANCE')
+
+        # View layer selector
+        if context.scene:
+            indirect_box.prop_search(
+                st, 'indirect_target_view_layer',
+                context.scene, 'view_layers',
+                text='View Layer',
+            )
+
+        # Determine which view layer to inspect for the count
+        target_vl = None
+        if st.indirect_target_view_layer and context.scene:
+            target_vl = context.scene.view_layers.get(st.indirect_target_view_layer)
+        if not target_vl:
+            target_vl = context.view_layer
+
+        # Count indirect-only collections in the target view layer
+        indirect_count = 0
+        if target_vl:
+            def _count_indirect(lc):
+                count = 0
+                for child in lc.children:
+                    if getattr(child, 'indirect_only', False) and not child.exclude:
+                        count += 1
+                    count += _count_indirect(child)
+                return count
+            indirect_count = _count_indirect(target_vl.layer_collection)
+
+        has_disabled = bool(getattr(st, 'indirect_disabled_collections', ''))
+
+        if has_disabled:
+            prev_names = [n for n in st.indirect_disabled_collections.split(';') if n]
+            indirect_box.label(text=f'{len(prev_names)} collection(s) currently excluded', icon='INFO')
+        else:
+            vl_name = target_vl.name if target_vl else '(none)'
+            indirect_box.label(
+                text=f'{indirect_count} indirect-only collection(s) in "{vl_name}"',
+                icon='INFO',
+            )
+        indirect_box.operator(
+            'rqm.toggle_indirect_only',
+            text='Toggle Indirect-Only',
+            icon='RESTRICT_RENDER_ON',
+        )
+
+        # --- All Layers toggle ---
+        indirect_box.separator()
+        has_all_disabled = bool(getattr(st, 'indirect_all_disabled_collections', ''))
+        if has_all_disabled:
+            count_str = ''
+            try:
+                total = sum(
+                    len(e.split(':', 1)[1].split(','))
+                    for e in st.indirect_all_disabled_collections.split(';')
+                    if ':' in e
+                )
+                count_str = f' ({total} excluded)'
+            except Exception:
+                pass
+            indirect_box.label(text=f'All layers{count_str}', icon='INFO')
+        indirect_box.operator(
+            'rqm.toggle_indirect_only_all',
+            text='Toggle All Layers',
+            icon='RESTRICT_RENDER_ON',
+        )
