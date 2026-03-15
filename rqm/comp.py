@@ -33,6 +33,44 @@ def get_compositor_node_tree(scn):
     return getattr(scn, 'node_tree', None)
 
 
+# ---------------------------------------------------------------------------
+# Blender 5.0 compat helpers for CompositorNodeOutputFile
+#
+# 5.0 removed  base_path / file_slots / layer_slots  and replaced them with
+# directory / file_name / file_output_items.
+# ---------------------------------------------------------------------------
+
+def _node_set_base_path(node, path: str):
+    """Set the output directory on a File Output node (4.x & 5.x)."""
+    if hasattr(node, 'directory'):
+        node.directory = path
+    else:
+        node.base_path = path
+
+
+def _node_get_slots(node):
+    """Return the slot/item collection for a File Output node (4.x & 5.x)."""
+    if hasattr(node, 'file_output_items'):
+        return node.file_output_items
+    return node.file_slots
+
+
+def _slot_get_path(slot) -> str:
+    """Read the sub-path / name of a file-output slot (4.x & 5.x)."""
+    # 5.x: items use 'name'; 4.x: slots use 'path'
+    if hasattr(slot, 'path'):
+        return getattr(slot, 'path', '') or ''
+    return getattr(slot, 'name', '') or ''
+
+
+def _slot_set_path(slot, value: str):
+    """Write the sub-path / name of a file-output slot (4.x & 5.x)."""
+    if hasattr(slot, 'path'):
+        slot.path = value
+    else:
+        slot.name = value
+
+
 def _append_job_suffix(folder: str, job: RQM_Job, token: str | None = None) -> str:
     """
     Ensure the final folder component follows the job-prefixed convention when enabled.
@@ -253,8 +291,9 @@ def resolve_base_dir(scn, job: RQM_Job, out: RQM_CompOutput, node_name: str):
     return base_dir, None
 
 def _ensure_min_slot(node, fallback_name: str):
-    if len(node.file_slots) == 0:
-        node.file_slots.new(fallback_name or 'render')
+    slots = _node_get_slots(node)
+    if len(slots) == 0:
+        slots.new(fallback_name or 'render')
 
 def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
     node, err = get_file_output_node(scn, out)
@@ -265,7 +304,7 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
         return False, err
     base_dir = bpy.path.abspath(base_dir or '//')
     try:
-        node.base_path = base_dir
+        _node_set_base_path(node, base_dir)
     except Exception as e:
         return False, f"Couldn't set File Output base path: {e}".strip()
     if out.ensure_dirs:
@@ -313,7 +352,7 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
     _ensure_min_slot(node, target_prefix)
     default_names = {'image', 'render'}
     try:
-        slots = list(node.file_slots)
+        slots = list(_node_get_slots(node))
     except Exception:
         slots = []
     updated_slots = 0
@@ -323,19 +362,19 @@ def sync_one_output(scn, job: RQM_Job, out: RQM_CompOutput):
             nonlocal updated_slots
             suffix = ''
             if slot_total > 1:
-                label = getattr(fs, 'name', '') or getattr(fs, 'path', '')
+                label = getattr(fs, 'name', '') or _slot_get_path(fs)
                 suffix = _sanitize_component(label)
                 if not suffix:
                     suffix = f'slot{idx+1}'
             if suffix:
-                fs.path = f"{target_core}_{suffix} "
+                _slot_set_path(fs, f"{target_core}_{suffix} ")
             else:
-                fs.path = target_prefix
+                _slot_set_path(fs, target_prefix)
             updated_slots += 1
 
         for idx, fs in enumerate(slots):
             desired = False
-            path_clean = (getattr(fs, 'path', '') or '').strip().replace('\\', '/').rstrip('/')
+            path_clean = _slot_get_path(fs).strip().replace('\\', '/').rstrip('/')
             norm = path_clean.lower()
             if not norm:
                 desired = True
