@@ -1,6 +1,6 @@
 """Render Queue Manager X - Blender extension entry point."""
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 
 # --- Hot reload support ---
 import importlib, sys
@@ -24,7 +24,8 @@ from .rqm.operators_queue import (
     RQM_OT_AddFromCurrent, RQM_OT_AddCamerasInScene, RQM_OT_RemoveJob, RQM_OT_ClearQueue,
     RQM_OT_MoveJob, RQM_OT_StartQueue, RQM_OT_StopQueue,
     RQM_OT_DuplicateJob, RQM_OT_EnableAll, RQM_OT_DisableAll,
-    RQM_OT_OpenOutputFolder,
+    RQM_OT_OpenOutputFolder, RQM_OT_CreateFolders,
+    RQM_OT_SyncStereoTags, RQM_OT_ToggleIndirectOnly, RQM_OT_ToggleIndirectOnlyAll,
 )
 from .rqm.operators_outputs import (
     RQM_OT_Output_Add, RQM_OT_Output_Remove, RQM_OT_Output_Move,
@@ -42,7 +43,8 @@ classes = (
     RQM_OT_AddFromCurrent, RQM_OT_AddCamerasInScene, RQM_OT_RemoveJob, RQM_OT_ClearQueue,
     RQM_OT_MoveJob, RQM_OT_StartQueue, RQM_OT_StopQueue,
     RQM_OT_DuplicateJob, RQM_OT_EnableAll, RQM_OT_DisableAll,
-    RQM_OT_OpenOutputFolder,
+    RQM_OT_OpenOutputFolder, RQM_OT_CreateFolders,
+    RQM_OT_SyncStereoTags, RQM_OT_ToggleIndirectOnly, RQM_OT_ToggleIndirectOnlyAll,
     RQM_OT_Output_Add, RQM_OT_Output_Remove, RQM_OT_Output_Move,
     RQM_OT_PickFileOutputNode,
     RQM_UL_Queue, RQM_UL_Outputs, RQM_UL_Tags, RQM_PT_Panel,
@@ -62,8 +64,8 @@ def register():
                 bpy.utils.register_class(c)
             except Exception:
                 pass
-    if not hasattr(bpy.types.Scene, 'rqm_state'):
-        bpy.types.Scene.rqm_state = PointerProperty(type=RQM_State)
+    # Always re-assign to pick up new/updated property definitions on hot-reload
+    bpy.types.Scene.rqm_state = PointerProperty(type=RQM_State)
     # (Re)register handlers each time register() runs
     try:
         handlers.unregister_handlers()

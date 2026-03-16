@@ -1,6 +1,6 @@
 # Render Queue Manager X — Reliable Multi-Job Rendering for Blender
 
-**Version:** 2.1.0 — **Blender Compatibility:** 4.2+ / 5.x (Extensions build)
+**Version:** 2.2.0 — **Blender Compatibility:** 4.2+ / 5.x (Extensions build)
 
 Render Queue Manager X is a modular toolkit for orchestrating Blender renders authored by **Xnom3d**. Queue per-scene jobs, keep compositor outputs tidy, and ship consistent folders for every shot without babysitting renders. Install once and drive the workflow from the **Properties ▸ Output** tab under **Render Queue Manager X**.
 
@@ -19,6 +19,8 @@ Render Queue Manager X is a modular toolkit for orchestrating Blender renders au
   - Per-job render time recorded and displayed in the queue list.
 - **Per-Job Overrides**
   - Override render samples (Cycles / Eevee) and encoding per job.
+  - **Margin (overscan)** — add extra pixels around the camera view with FOV-corrected framing.
+  - **Indirect-only collection toggle** — exclude/include indirect-only collections from view layers.
   - Free-text notes field for annotating jobs.
 - **Deterministic Output Layout**
   - Every job renders to `<root>/<job>/base/<basename><frame>.<ext>`.
@@ -112,6 +114,13 @@ Note: The previous “Detect View Tags” utility was removed. Use the free‑te
 ---
 
 ## Release Notes
+
+### 2.2.0
+
+- **Stereo tag sync** — stereo tags auto-populate from scene render views; manual sync button available.
+- **Indirect-only collection toggle** — exclude/include indirect-only collections from view layers (replaces indirect clamp override).
+- **Margin (overscan)** — add extra pixels with FOV-corrected framing (now uses camera angle instead of sensor dimensions).
+- **Create Folders** — pre-create output directories for all enabled jobs before rendering.
 
 ### 2.1.0
 

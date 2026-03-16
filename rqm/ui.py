@@ -304,7 +304,8 @@ class RQM_PT_Panel(Panel):
             return
 
         tab_row = layout.row(align=True)
-        tab_row.prop(st, 'ui_tab', expand=True)
+        if hasattr(st, 'ui_tab'):
+            tab_row.prop(st, 'ui_tab', expand=True)
         if getattr(st, 'ui_tab', 'QUEUE') == 'STATS':
             _draw_stats_tab(layout, st)
             _draw_queue_controls(layout, st)
@@ -318,6 +319,7 @@ class RQM_PT_Panel(Panel):
         toggle_row = layout.row(align=True)
         toggle_row.operator('rqm.enable_all', icon='CHECKBOX_HLT')
         toggle_row.operator('rqm.disable_all', icon='CHECKBOX_DEHLT')
+        toggle_row.operator('rqm.create_folders', icon='NEWFOLDER')
 
         row_list = layout.row()
         row_list.template_list('RQM_UL_Queue', '', st, 'queue', st, 'active_index', rows=6)
@@ -392,12 +394,28 @@ class RQM_PT_Panel(Panel):
                 sub_samp.enabled = getattr(job, 'use_samples_override', False)
                 sub_samp.prop(job, 'samples', text='Samples')
 
+            ind_row = box.row(align=True)
+            ind_row.label(text='Indirect Collections:', icon='OUTLINER_COLLECTION')
+            ind_row.operator('rqm.toggle_indirect_only', text='Toggle (Layer)')
+            ind_row.operator('rqm.toggle_indirect_only_all', text='Toggle (All)')
+
             col = box.column(align=True)
             col.label(text='Resolution')
             rr = col.row(align=True)
             rr.prop(job, 'res_x')
             rr.prop(job, 'res_y')
             rr.prop(job, 'percent')
+
+            if hasattr(job, 'use_margin') and hasattr(job, 'margin'):
+                margin_row = col.row(align=True)
+                margin_row.prop(job, 'use_margin')
+                sub_margin = margin_row.row(align=True)
+                sub_margin.enabled = getattr(job, 'use_margin', False)
+                sub_margin.prop(job, 'margin', text='Margin (px)')
+                if getattr(job, 'use_margin', False) and job.margin > 0:
+                    eff_x = job.res_x + job.margin * 2
+                    eff_y = job.res_y + job.margin * 2
+                    col.label(text=f'Effective: {eff_x} x {eff_y}', icon='INFO')
 
             col.separator()
             col.prop(job, 'use_animation')
@@ -460,6 +478,7 @@ class RQM_PT_Panel(Panel):
                 tag_row = col.row(align=True)
                 if hasattr(job, 'use_tag_collection'):
                     tag_row.prop(job, 'use_tag_collection', text='Use Tag List')
+                tag_row.operator('rqm.sync_stereo_tags', text='', icon='FILE_REFRESH')
                 if getattr(job, 'use_tag_collection', False):
                     tag_box = col.box()
                     tag_box.template_list(
@@ -502,19 +521,23 @@ class RQM_PT_Panel(Panel):
                     )
                     sub.prop(out, 'create_if_missing')
                     sub.prop(out, 'override_node_format')
-                    sub.prop(out, 'use_custom_encoding')
-                    enc_info = sub.box()
-                    if out.use_custom_encoding:
-                        enc_info.label(text='Encoding', icon='COLOR')
-                        _draw_encoding_controls(
-                            enc_info,
-                            getattr(out, 'encoding', None),
-                            job.file_format if out.override_node_format else job.file_format,
-                        )
+                    if hasattr(out, 'use_custom_encoding'):
+                        sub.prop(out, 'use_custom_encoding')
+                        enc_info = sub.box()
+                        if out.use_custom_encoding:
+                            enc_info.label(text='Encoding', icon='COLOR')
+                            _draw_encoding_controls(
+                                enc_info,
+                                getattr(out, 'encoding', None),
+                                job.file_format if out.override_node_format else job.file_format,
+                            )
+                        elif out.override_node_format:
+                            enc_info.label(text='Follows job encoding', icon='INFO')
+                        else:
+                            enc_info.label(text='Uses node encoding', icon='INFO')
                     elif out.override_node_format:
+                        enc_info = sub.box()
                         enc_info.label(text='Follows job encoding', icon='INFO')
-                    else:
-                        enc_info.label(text='Uses node encoding', icon='INFO')
                     sub.separator()
                     sub.label(text='Save location', icon='FILE_FOLDER')
                     sub.prop(out, 'base_source', text='Base')
