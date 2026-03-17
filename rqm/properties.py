@@ -33,6 +33,7 @@ __all__ = [
     'get_job_view_layer_names',
     'set_job_view_layer_names',
     'sync_job_view_layers',
+    '_sync_stereo_tags_from_scene',
 ]
 
 
@@ -268,6 +269,33 @@ class RQM_RenderStat(PropertyGroup):
     value: StringProperty(name='Value', default='')
 
 
+def _sync_stereo_tags_from_scene(job):
+    """Populate job.stereo_tags from the scene's render views."""
+    scn = bpy.data.scenes.get(job.scene_name) if getattr(job, 'scene_name', '') else None
+    if not scn:
+        return
+    existing_names = {t.name for t in job.stereo_tags}
+    fmt = getattr(job, 'stereo_views_format', 'STEREO_3D')
+    if fmt == 'STEREO_3D':
+        for tag_name in ('left', 'right'):
+            if tag_name not in existing_names:
+                t = job.stereo_tags.add()
+                t.name = tag_name
+                t.enabled = True
+    else:  # MULTIVIEW
+        if hasattr(scn.render, 'views'):
+            for view in scn.render.views:
+                if view.name not in existing_names:
+                    t = job.stereo_tags.add()
+                    t.name = view.name
+                    t.enabled = getattr(view, 'use', True)
+
+
+def _on_stereo_change(self, context):
+    if getattr(self, 'use_stereoscopy', False):
+        _sync_stereo_tags_from_scene(self)
+
+
 def _on_job_scene_change(self, context):
     scene_name = getattr(self, 'scene_name', '')
     scn = bpy.data.scenes.get(scene_name) if scene_name else None
@@ -415,6 +443,7 @@ class RQM_Job(PropertyGroup):
         name='Use Stereoscopy',
         default=False,
         description='Enable multiview (stereoscopic) rendering for this job',
+        update=_on_stereo_change,
     )
     stereo_views_format: EnumProperty(
         name='Stereo Format',
@@ -424,6 +453,7 @@ class RQM_Job(PropertyGroup):
         ],
         default='STEREO_3D',
         description='How to configure view rendering for this job',
+        update=_on_stereo_change,
     )
     stereo_extra_tags: StringProperty(
         name='Extra view tags',
@@ -468,6 +498,21 @@ class RQM_Job(PropertyGroup):
         min=1,
         max=1048576,
         description='Number of render samples for this job (Cycles/Eevee)',
+    )
+
+    # Margin (overscan)
+    use_margin: BoolProperty(
+        name='Use Margin',
+        default=False,
+        description='Add extra pixels around the camera view (overscan)',
+    )
+    margin: IntProperty(
+        name='Margin',
+        default=0,
+        min=0,
+        max=10000,
+        subtype='PIXEL',
+        description='Margin in pixels added to each side of the render',
     )
     last_render_time: FloatProperty(
         name='Last Render Time',
@@ -518,6 +563,12 @@ class RQM_State(PropertyGroup):
     stats_lines: CollectionProperty(type=RQM_RenderStat)
     skip_increment: BoolProperty(default=False, options={'HIDDEN'})
     render_start_time: FloatProperty(default=0.0, options={'HIDDEN'})
+    indirect_disabled_collections: StringProperty(
+        name='Indirect Disabled Collections',
+        default='',
+        options={'HIDDEN'},
+        description='JSON: tracks collections toggled by indirect-only operators',
+    )
     auto_save: BoolProperty(
         name='Auto Save',
         default=True,

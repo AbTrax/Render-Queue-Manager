@@ -6,7 +6,20 @@ from .utils import _ensure_dir, apply_encoding_settings, view_layer_identifier_m
 from .comp import base_render_dir, comp_root_dir, sync_one_output, job_file_prefix
 from .properties import RQM_Job, get_job_view_layer_names, sync_job_view_layers
 
-__all__ = ['apply_job']
+__all__ = ['apply_job', 'restore_margin_cameras']
+
+# Store original camera FOV angle when margin is applied, keyed by camera data name
+_margin_originals = {}
+
+
+def restore_margin_cameras():
+    """Restore original FOV angle for all margin-modified cameras."""
+    for cam_name, orig_angle in list(_margin_originals.items()):
+        cam = bpy.data.cameras.get(cam_name)
+        if cam:
+            cam.angle = orig_angle
+    _margin_originals.clear()
+
 
 def apply_job(job: RQM_Job):
     scn = bpy.data.scenes.get(job.scene_name)
@@ -80,9 +93,33 @@ def apply_job(job: RQM_Job):
                     break
             else:
                 break
+    # Restore any margin-modified cameras from a previous job
+    restore_margin_cameras()
     scn.render.resolution_x = job.res_x
     scn.render.resolution_y = job.res_y
     scn.render.resolution_percentage = job.percent
+    # Apply margin (overscan) — increase resolution, adjust camera FOV and sensor
+    if getattr(job, 'use_margin', False) and getattr(job, 'margin', 0) > 0:
+        margin_px = job.margin
+        new_x = job.res_x + margin_px * 2
+        new_y = job.res_y + margin_px * 2
+        scn.render.resolution_x = new_x
+        scn.render.resolution_y = new_y
+        cam_data = scn.camera.data if scn.camera else None
+        if cam_data:
+            import math
+            _margin_originals[cam_data.name] = cam_data.angle
+            # Use correct trigonometric FOV scaling based on sensor_fit
+            if cam_data.sensor_fit == 'VERTICAL':
+                scale = new_y / job.res_y
+            elif cam_data.sensor_fit == 'HORIZONTAL':
+                scale = new_x / job.res_x
+            else:  # AUTO — Blender uses the larger dimension
+                if new_x >= new_y:
+                    scale = new_x / job.res_x
+                else:
+                    scale = new_y / job.res_y
+            cam_data.angle = 2 * math.atan(math.tan(cam_data.angle / 2) * scale)
     # Stereoscopy (multiview) handling
     try:
         if getattr(job, 'use_stereoscopy', False):

@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.0] - 2026-03-16
+
+### Added
+
+- **Stereo tag sync** — stereo tags auto-populate from scene render views when stereoscopy is enabled. Manual "Sync from Scene" button available.
+- **Indirect-only collection toggle** — operators to exclude/include indirect-only collections from view layers, useful for Eevee where indirect-only is unsupported.
+- **Create Folders** — pre-create output directories for all enabled jobs before rendering.
+- **Margin (overscan)** — add extra pixels around the camera view with FOV-corrected framing.
+
+### Changed
+
+- Margin now adjusts camera FOV angle instead of sensor dimensions for more accurate overscan framing.
+
+### Removed
+
+- Per-job indirect light clamping override (replaced by indirect-only collection toggle).
+
 ## [2.1.0] - 2026-03-10
 
 ### Added

@@ -90,7 +90,36 @@ def engine_items(self, context):
     if 'CYCLES' not in seen:
         items.append(('CYCLES', 'Cycles', 'Cycles Render Engine'))
     # Blender 4.2+ uses BLENDER_EEVEE_NEXT / BLENDER_WORKBENCH_NEXT;
-    # Blender 5.x may rename them back. Handle both.
+    # Blender 5.x may rename them back. Ensure both are present as fallbacks.
+    has_workbench = any(ident in seen for ident in ('BLENDER_WORKBENCH', 'BLENDER_WORKBENCH_NEXT'))
+    if not has_workbench:
+        # Try to detect the correct identifier for this Blender build
+        for wb_id, wb_name in (
+            ('BLENDER_WORKBENCH_NEXT', 'Workbench'),
+            ('BLENDER_WORKBENCH', 'Workbench'),
+        ):
+            try:
+                bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items[wb_id]
+                items.append((wb_id, wb_name, 'Workbench Render Engine'))
+                break
+            except (KeyError, Exception):
+                continue
+        else:
+            items.append(('BLENDER_WORKBENCH', 'Workbench', 'Workbench Render Engine'))
+    has_eevee = any(ident in seen for ident in ('BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'))
+    if not has_eevee:
+        for ee_id, ee_name in (
+            ('BLENDER_EEVEE_NEXT', 'EEVEE'),
+            ('BLENDER_EEVEE', 'EEVEE'),
+        ):
+            try:
+                bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items[ee_id]
+                items.append((ee_id, ee_name, 'EEVEE Render Engine'))
+                break
+            except (KeyError, Exception):
+                continue
+        else:
+            items.append(('BLENDER_EEVEE_NEXT', 'EEVEE', 'EEVEE Render Engine'))
     return items or [('CYCLES', 'Cycles', 'Cycles Render Engine')]
 
 

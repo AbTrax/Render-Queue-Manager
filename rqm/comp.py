@@ -286,6 +286,10 @@ def resolve_base_dir(scn, job: RQM_Job, out: RQM_CompOutput, node_name: str):
             base_dir = os.path.join(base_dir, sub)
             leaf_hint = os.path.basename(sub.rstrip('/\\'))
     if out.base_source == 'JOB_OUTPUT':
+        if not leaf_hint and not node_hint:
+            # No subfolder was added; place inside a 'comp' subfolder to keep
+            # compositor outputs inside the job folder (not replacing it).
+            base_dir = os.path.join(base_dir, 'comp')
         token = leaf_hint or node_hint or 'comp'
         base_dir = _append_job_suffix(base_dir, job, token)
     return base_dir, None

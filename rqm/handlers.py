@@ -219,6 +219,12 @@ def register_handlers():
                         pass
             except Exception:
                 pass
+            # Restore margin-modified cameras after each job
+            try:
+                from .jobs import restore_margin_cameras
+                restore_margin_cameras()
+            except Exception:
+                pass
             if st.running and was_render and not getattr(st, 'skip_increment', False) and st.current_job_index < len(st.queue):
                 st.current_job_index += 1
             try:
@@ -246,6 +252,12 @@ def register_handlers():
             st.render_in_progress = False
             try:
                 st.stall_polls = 0
+            except Exception:
+                pass
+            # Restore margin-modified cameras after cancel
+            try:
+                from .jobs import restore_margin_cameras
+                restore_margin_cameras()
             except Exception:
                 pass
             if st.running and was_render and not getattr(st, 'skip_increment', False) and st.current_job_index < len(st.queue):
@@ -390,6 +402,11 @@ _dup_token_sep = re.compile(r'[_\.]+')
 _num_before_suffix_pat = re.compile(r'^(?P<base>.+?)(?P<frame>\d{3,})(?P<tag>_[A-Za-z0-9]+)(?P<ext>\.[^.]+)$')
 _any_frame_pat = re.compile(
     r'^(?P<prefix>.+?)(?P<tag>_[A-Za-z0-9]+)?\s+(?:(?P<src>\d{3,})[-_])?(?P<frame>\d{3,})(?P<ext>\.[^.]+)$'
+)
+# Matches numeric multiview suffix AFTER frame: prefix 0005.002.exr, prefix 0005_002.exr,
+# or prefix 0005. 002.exr (space inserted by Pass 2)
+_numeric_view_after_frame_pat = re.compile(
+    r'^(?P<base>.+?)\s+(?P<frame>\d{3,})[._]\s*(?P<view>\d{2,3})(?P<ext>\.[^.]+)$'
 )
 
 def _parse_extra_tags(raw: str):
@@ -554,6 +571,36 @@ def _stereo_rename(job):
                         except Exception:
                             pass
                     processed.add(path)
+        # Pass 1b: move numeric multiview suffixes from after frame to before frame
+        # e.g. prefix 0005.002.exr -> prefix.002 0005.exr
+        # Must run before Pass 2 which would misidentify .NNN as a frame number
+        for root in search_roots:
+            try:
+                for fname in os.listdir(root):
+                    if not fname.lower().endswith(ext):
+                        continue
+                    fpath = os.path.join(root, fname)
+                    if fpath in processed or not os.path.isfile(fpath):
+                        continue
+                    mv = _numeric_view_after_frame_pat.match(fname)
+                    if not mv:
+                        continue
+                    base = mv.group('base')
+                    frame = mv.group('frame')
+                    view = mv.group('view')
+                    ext_full = mv.group('ext')
+                    new_name = f"{base}.{view} {frame}{ext_full}"
+                    if new_name != fname:
+                        new_path = os.path.join(root, new_name)
+                        try:
+                            if os.path.exists(new_path):
+                                os.remove(new_path)
+                            os.replace(fpath, new_path)
+                        except Exception:
+                            pass
+                    processed.add(fpath)
+            except Exception:
+                pass
         # Pass 2: ensure space before frame for plain (non-view) files e.g. main.0010000 -> main.001 0000
         for path in plain_candidates:
             if path in processed or not os.path.isfile(path):

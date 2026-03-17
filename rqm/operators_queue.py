@@ -12,11 +12,24 @@ from bpy.types import Operator  # type: ignore
 
 from .handlers import register_handlers
 from .jobs import apply_job
-from .properties import RQM_Job, set_job_view_layer_names, sync_job_view_layers
+from .properties import (
+    RQM_Job,
+    _sync_stereo_tags_from_scene,
+    get_job_view_layer_names,
+    set_job_view_layer_names,
+    sync_job_view_layers,
+)
 from .state import get_state
 from .utils import _sanitize_component, view_layer_identifier_map
 
 _STALL_POLL_THRESHOLD = 12
+
+
+def _iter_layer_collections(lc):
+    """Recursively yield all layer collections."""
+    yield lc
+    for child in lc.children:
+        yield from _iter_layer_collections(child)
 
 
 # ---- Local item callbacks (avoid lambda for Blender EnumProperty) ----
@@ -66,6 +79,10 @@ __all__ = [
     'RQM_OT_EnableAll',
     'RQM_OT_DisableAll',
     'RQM_OT_OpenOutputFolder',
+    'RQM_OT_CreateFolders',
+    'RQM_OT_SyncStereoTags',
+    'RQM_OT_ToggleIndirectOnly',
+    'RQM_OT_ToggleIndirectOnlyAll',
 ]
 
 
@@ -294,6 +311,8 @@ class RQM_OT_DuplicateJob(Operator):
             'notes',
             'use_samples_override',
             'samples',
+            'use_margin',
+            'margin',
         ]:
             if hasattr(dst, attr) and hasattr(src, attr):
                 setattr(dst, attr, getattr(src, attr))
@@ -499,6 +518,12 @@ class RQM_OT_StopQueue(Operator):
         st = get_state(context)
         if st is None:
             return {'CANCELLED'}
+        # Restore any margin-modified cameras
+        try:
+            from .jobs import restore_margin_cameras
+            restore_margin_cameras()
+        except Exception:
+            pass
         st.running = False
         st.current_job_index = -1
         st.render_in_progress = False
@@ -550,6 +575,160 @@ class RQM_OT_DisableAll(Operator):
         for job in st.queue:
             job.enabled = False
         self.report({'INFO'}, 'All jobs disabled.')
+        return {'FINISHED'}
+
+
+class RQM_OT_CreateFolders(Operator):
+    bl_idname = 'rqm.create_folders'
+    bl_label = 'Create Folders'
+    bl_description = 'Pre-create output directories for all enabled jobs'
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        st = get_state(context)
+        if st is None or not st.queue:
+            self.report({'WARNING'}, 'No jobs in queue.')
+            return {'CANCELLED'}
+        from .comp import base_render_dir, comp_root_dir, job_root_dir, resolve_base_dir
+        from .utils import _ensure_dir
+        created = 0
+        errors = []
+        for job in st.queue:
+            if not job.enabled:
+                continue
+            ok, err = _ensure_dir(job_root_dir(job))
+            if not ok:
+                errors.append(err)
+                continue
+            _ensure_dir(base_render_dir(job))
+            if job.use_comp_outputs:
+                _ensure_dir(comp_root_dir(job))
+                for out in job.comp_outputs:
+                    if not out.enabled:
+                        continue
+                    scn = bpy.data.scenes.get(job.scene_name)
+                    if scn:
+                        node_name = out.node_name or 'File Output'
+                        base_dir, _ = resolve_base_dir(scn, job, out, node_name)
+                        if base_dir:
+                            _ensure_dir(bpy.path.abspath(base_dir))
+            created += 1
+        if errors:
+            self.report({'WARNING'}, f'Created folders for {created} jobs, {len(errors)} errors.')
+        else:
+            self.report({'INFO'}, f'Created folders for {created} jobs.')
+        return {'FINISHED'}
+
+
+class RQM_OT_SyncStereoTags(Operator):
+    bl_idname = 'rqm.sync_stereo_tags'
+    bl_label = 'Sync Stereo Tags'
+    bl_description = "Populate the active job's stereo tags from the scene's render views"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        st = get_state(context)
+        if st is None or not (0 <= st.active_index < len(st.queue)):
+            self.report({'WARNING'}, 'No job selected.')
+            return {'CANCELLED'}
+        job = st.queue[st.active_index]
+        _sync_stereo_tags_from_scene(job)
+        self.report({'INFO'}, 'Stereo tags synced from scene.')
+        return {'FINISHED'}
+
+
+class RQM_OT_ToggleIndirectOnly(Operator):
+    bl_idname = 'rqm.toggle_indirect_only'
+    bl_label = 'Toggle Indirect (Layer)'
+    bl_description = (
+        'Exclude or include indirect-only collections in the active job\'s view layers'
+    )
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        import json
+
+        st = get_state(context)
+        if st is None or not (0 <= st.active_index < len(st.queue)):
+            self.report({'WARNING'}, 'No job selected.')
+            return {'CANCELLED'}
+        job = st.queue[st.active_index]
+        scn = bpy.data.scenes.get(job.scene_name) if job.scene_name else None
+        if not scn:
+            self.report({'WARNING'}, 'Job scene not found.')
+            return {'CANCELLED'}
+        vl_names = get_job_view_layer_names(job)
+        if not vl_names:
+            vl_names = [vl.name for vl in scn.view_layers]
+
+        try:
+            tracked = json.loads(st.indirect_disabled_collections or '{}')
+        except Exception:
+            tracked = {}
+
+        toggled = 0
+        for vl in scn.view_layers:
+            if vl.name not in vl_names:
+                continue
+            for lc in _iter_layer_collections(vl.layer_collection):
+                if not getattr(lc, 'indirect_only', False):
+                    continue
+                key = f'{scn.name}|{vl.name}|{lc.name}'
+                if key in tracked:
+                    lc.exclude = False
+                    del tracked[key]
+                else:
+                    lc.exclude = True
+                    tracked[key] = True
+                toggled += 1
+
+        st.indirect_disabled_collections = json.dumps(tracked)
+        self.report({'INFO'}, f'Toggled {toggled} indirect-only collections.')
+        return {'FINISHED'}
+
+
+class RQM_OT_ToggleIndirectOnlyAll(Operator):
+    bl_idname = 'rqm.toggle_indirect_only_all'
+    bl_label = 'Toggle Indirect (All)'
+    bl_description = (
+        'Exclude or include indirect-only collections across all view layers in the scene'
+    )
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        import json
+
+        st = get_state(context)
+        if st is None or not (0 <= st.active_index < len(st.queue)):
+            self.report({'WARNING'}, 'No job selected.')
+            return {'CANCELLED'}
+        job = st.queue[st.active_index]
+        scn = bpy.data.scenes.get(job.scene_name) if job.scene_name else None
+        if not scn:
+            self.report({'WARNING'}, 'Job scene not found.')
+            return {'CANCELLED'}
+
+        try:
+            tracked = json.loads(st.indirect_disabled_collections or '{}')
+        except Exception:
+            tracked = {}
+
+        toggled = 0
+        for vl in scn.view_layers:
+            for lc in _iter_layer_collections(vl.layer_collection):
+                if not getattr(lc, 'indirect_only', False):
+                    continue
+                key = f'{scn.name}|{vl.name}|{lc.name}'
+                if key in tracked:
+                    lc.exclude = False
+                    del tracked[key]
+                else:
+                    lc.exclude = True
+                    tracked[key] = True
+                toggled += 1
+
+        st.indirect_disabled_collections = json.dumps(tracked)
+        self.report({'INFO'}, f'Toggled {toggled} indirect-only collections.')
         return {'FINISHED'}
 
 
