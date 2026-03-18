@@ -19,19 +19,25 @@ if any(m.startswith(_pkg_name + '.rqm') for m in list(sys.modules.keys())):
             except Exception:
                 pass
 
-from .rqm.properties import RQM_CompOutput, RQM_EncodingSettings, RQM_Job, RQM_RenderStat, RQM_State, RQM_Tag
+from .rqm.properties import (
+    RQM_ViewLayerItem, RQM_CompOutput, RQM_EncodingSettings,
+    RQM_Job, RQM_RenderStat, RQM_State, RQM_Tag, RQM_Template,
+)
 from .rqm.operators_queue import (
     RQM_OT_AddFromCurrent, RQM_OT_AddCamerasInScene, RQM_OT_RemoveJob, RQM_OT_ClearQueue,
     RQM_OT_MoveJob, RQM_OT_StartQueue, RQM_OT_StopQueue,
     RQM_OT_DuplicateJob, RQM_OT_EnableAll, RQM_OT_DisableAll,
     RQM_OT_OpenOutputFolder, RQM_OT_CreateFolders,
     RQM_OT_SyncStereoTags, RQM_OT_ToggleIndirectOnly, RQM_OT_ToggleIndirectOnlyAll,
+    RQM_OT_CopyPath, RQM_OT_ViewLayerSelectAll, RQM_OT_ViewLayerDeselectAll,
+    RQM_OT_RefreshViewLayers, RQM_OT_SaveTemplate, RQM_OT_LoadTemplate,
+    RQM_OT_DeleteTemplate, RQM_OT_ToggleIndirectSelect,
 )
 from .rqm.operators_outputs import (
     RQM_OT_Output_Add, RQM_OT_Output_Remove, RQM_OT_Output_Move,
-    RQM_OT_PickFileOutputNode,
+    RQM_OT_PickFileOutputNode, RQM_OT_Output_AddAll,
 )
-from .rqm.ui import RQM_UL_Queue, RQM_UL_Outputs, RQM_UL_Tags, RQM_PT_Panel
+from .rqm.ui import RQM_UL_Queue, RQM_UL_Outputs, RQM_UL_Tags, RQM_UL_ViewLayers, RQM_PT_Panel
 from .rqm import comp  # ensure compositor logic packaged
 from .rqm import handlers  # ensure handlers module present (for reload)
 
@@ -39,15 +45,19 @@ import bpy  # type: ignore
 from bpy.props import PointerProperty  # type: ignore
 
 classes = (
-    RQM_Tag, RQM_EncodingSettings, RQM_CompOutput, RQM_RenderStat, RQM_Job, RQM_State,
+    RQM_ViewLayerItem, RQM_Tag, RQM_EncodingSettings, RQM_CompOutput, RQM_RenderStat,
+    RQM_Template, RQM_Job, RQM_State,
     RQM_OT_AddFromCurrent, RQM_OT_AddCamerasInScene, RQM_OT_RemoveJob, RQM_OT_ClearQueue,
     RQM_OT_MoveJob, RQM_OT_StartQueue, RQM_OT_StopQueue,
     RQM_OT_DuplicateJob, RQM_OT_EnableAll, RQM_OT_DisableAll,
     RQM_OT_OpenOutputFolder, RQM_OT_CreateFolders,
     RQM_OT_SyncStereoTags, RQM_OT_ToggleIndirectOnly, RQM_OT_ToggleIndirectOnlyAll,
+    RQM_OT_CopyPath, RQM_OT_ViewLayerSelectAll, RQM_OT_ViewLayerDeselectAll,
+    RQM_OT_RefreshViewLayers, RQM_OT_SaveTemplate, RQM_OT_LoadTemplate,
+    RQM_OT_DeleteTemplate, RQM_OT_ToggleIndirectSelect,
     RQM_OT_Output_Add, RQM_OT_Output_Remove, RQM_OT_Output_Move,
-    RQM_OT_PickFileOutputNode,
-    RQM_UL_Queue, RQM_UL_Outputs, RQM_UL_Tags, RQM_PT_Panel,
+    RQM_OT_PickFileOutputNode, RQM_OT_Output_AddAll,
+    RQM_UL_Queue, RQM_UL_Outputs, RQM_UL_Tags, RQM_UL_ViewLayers, RQM_PT_Panel,
 )
 
 def register():

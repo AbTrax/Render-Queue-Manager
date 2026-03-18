@@ -8,7 +8,7 @@ from .state import get_state
 
 __all__ = [
     'RQM_OT_Output_Add', 'RQM_OT_Output_Remove', 'RQM_OT_Output_Move',
-    'RQM_OT_PickFileOutputNode',
+    'RQM_OT_PickFileOutputNode', 'RQM_OT_Output_AddAll',
 ]
 
 
@@ -139,5 +139,62 @@ class RQM_OT_PickFileOutputNode(Operator):
         idx = job.comp_outputs_index
         if 0 <= idx < len(job.comp_outputs):
             job.comp_outputs[idx].node_name = self.node
+        return {'FINISHED'}
+
+
+class RQM_OT_Output_AddAll(Operator):
+    bl_idname = 'rqm.output_add_all'
+    bl_label = 'Add All File Output Nodes'
+    bl_description = 'Add all File Output nodes from the compositor that are not already in the list'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        st = get_state(context)
+        if not (st and 0 <= st.active_index < len(st.queue)):
+            self.report({'WARNING'}, 'No job selected.')
+            return {'CANCELLED'}
+        job = st.queue[st.active_index]
+        scn = bpy.data.scenes.get(job.scene_name) if job.scene_name else None
+        if not scn:
+            scn = context.scene
+        nt = get_compositor_node_tree(scn)
+        if not nt:
+            self.report({'WARNING'}, 'No compositor node tree found.')
+            return {'CANCELLED'}
+        existing_names = {out.node_name for out in job.comp_outputs}
+        added = 0
+        for node in nt.nodes:
+            if node.bl_idname != 'CompositorNodeOutputFile':
+                continue
+            if node.name in existing_names:
+                continue
+            out = job.comp_outputs.add()
+            out.enabled = True
+            out.node_name = node.name
+            out.create_if_missing = False
+            out.base_source = 'JOB_OUTPUT'
+            out.use_node_named_subfolder = True
+            out.extra_subfolder = ''
+            out.ensure_dirs = True
+            out.override_node_format = True
+            out.use_custom_encoding = False
+            job_enc = getattr(job, 'encoding', None)
+            out_enc = getattr(out, 'encoding', None)
+            if out_enc and job_enc:
+                try:
+                    out_enc.color_mode = job_enc.color_mode
+                    out_enc.color_depth = job_enc.color_depth
+                    out_enc.compression = job_enc.compression
+                    out_enc.quality = job_enc.quality
+                    out_enc.exr_codec = job_enc.exr_codec
+                except Exception:
+                    pass
+            added += 1
+        if added > 0:
+            job.use_comp_outputs = True
+            job.comp_outputs_index = len(job.comp_outputs) - 1
+            self.report({'INFO'}, f'Added {added} File Output node(s).')
+        else:
+            self.report({'INFO'}, 'No new File Output nodes to add.')
         return {'FINISHED'}
 

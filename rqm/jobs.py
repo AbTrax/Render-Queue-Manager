@@ -99,10 +99,19 @@ def apply_job(job: RQM_Job):
     scn.render.resolution_y = job.res_y
     scn.render.resolution_percentage = job.percent
     # Apply margin (overscan) — increase resolution, adjust camera FOV and sensor
-    if getattr(job, 'use_margin', False) and getattr(job, 'margin', 0) > 0:
-        margin_px = job.margin
-        new_x = job.res_x + margin_px * 2
-        new_y = job.res_y + margin_px * 2
+    if getattr(job, 'use_margin', False):
+        if getattr(job, 'use_separate_margins', False):
+            mx, my = getattr(job, 'margin_x', 0), getattr(job, 'margin_y', 0)
+        else:
+            mx = my = getattr(job, 'margin', 0)
+        new_x = job.res_x + mx * 2
+        new_y = job.res_y + my * 2
+        has_margin = mx > 0 or my > 0
+    else:
+        has_margin = False
+        new_x = job.res_x
+        new_y = job.res_y
+    if has_margin:
         scn.render.resolution_x = new_x
         scn.render.resolution_y = new_y
         cam_data = scn.camera.data if scn.camera else None

@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 import bpy  # type: ignore
-from bpy.props import EnumProperty, IntProperty  # type: ignore
+from bpy.props import EnumProperty, IntProperty, StringProperty  # type: ignore
 from bpy.types import Operator  # type: ignore
 
 from .handlers import register_handlers
@@ -15,9 +15,12 @@ from .jobs import apply_job
 from .properties import (
     RQM_Job,
     _sync_stereo_tags_from_scene,
+    copy_template_to_job,
+    copy_job_to_template,
     get_job_view_layer_names,
     set_job_view_layer_names,
     sync_job_view_layers,
+    sync_view_layer_list_from_scene,
 )
 from .state import get_state
 from .utils import _sanitize_component, view_layer_identifier_map
@@ -83,6 +86,14 @@ __all__ = [
     'RQM_OT_SyncStereoTags',
     'RQM_OT_ToggleIndirectOnly',
     'RQM_OT_ToggleIndirectOnlyAll',
+    'RQM_OT_CopyPath',
+    'RQM_OT_ViewLayerSelectAll',
+    'RQM_OT_ViewLayerDeselectAll',
+    'RQM_OT_RefreshViewLayers',
+    'RQM_OT_SaveTemplate',
+    'RQM_OT_LoadTemplate',
+    'RQM_OT_DeleteTemplate',
+    'RQM_OT_ToggleIndirectSelect',
 ]
 
 
@@ -146,12 +157,22 @@ class RQM_OT_AddFromCurrent(Operator):
         return {'FINISHED'}
 
 
+def _add_cameras_template_items(self, context):
+    items = [('NONE', 'Scene Defaults', 'Use current scene settings')]
+    st = getattr(context.scene, 'rqm_state', None) if context else None
+    if st:
+        for i, tmpl in enumerate(st.templates):
+            items.append((str(i), tmpl.name, f'Apply template: {tmpl.name}'))
+    return items
+
+
 class RQM_OT_AddCamerasInScene(Operator):
     bl_idname = 'rqm.add_cameras_in_scene'
     bl_label = 'Add Jobs for all cameras in a scene'
     bl_description = 'Create one job per camera in the chosen scene'
     bl_options = {'REGISTER', 'UNDO'}
     scene_name: EnumProperty(name='Scene', items=_operator_scene_items)
+    template_name: EnumProperty(name='Template', items=_add_cameras_template_items)
 
     def invoke(self, context, event):
         if not self.scene_name and context.scene:
@@ -171,6 +192,15 @@ class RQM_OT_AddCamerasInScene(Operator):
         if not cams:
             self.report({'WARNING'}, 'No cameras in that scene.')
             return {'CANCELLED'}
+        # Resolve template
+        tmpl = None
+        if self.template_name != 'NONE':
+            try:
+                tmpl_idx = int(self.template_name)
+                if 0 <= tmpl_idx < len(st.templates):
+                    tmpl = st.templates[tmpl_idx]
+            except (ValueError, IndexError):
+                pass
         for cam in cams:
             job = st.queue.add()
             job.scene_name = scn.name
@@ -215,6 +245,15 @@ class RQM_OT_AddCamerasInScene(Operator):
                 job.use_stereoscopy = False
             if hasattr(job, 'stereo_views_format'):
                 job.stereo_views_format = 'STEREO_3D'
+            # Apply template if selected (preserving camera, scene, and name)
+            if tmpl:
+                saved_name = job.name
+                saved_scene = job.scene_name
+                saved_camera = job.camera_name
+                copy_template_to_job(tmpl, job)
+                job.name = saved_name
+                job.scene_name = saved_scene
+                job.camera_name = saved_camera
         st.active_index = len(st.queue) - 1
         self.report({'INFO'}, f'Added {len(cams)} jobs.')
         return {'FINISHED'}
@@ -313,6 +352,9 @@ class RQM_OT_DuplicateJob(Operator):
             'samples',
             'use_margin',
             'margin',
+            'use_separate_margins',
+            'margin_x',
+            'margin_y',
         ]:
             if hasattr(dst, attr) and hasattr(src, attr):
                 setattr(dst, attr, getattr(src, attr))
@@ -365,6 +407,12 @@ class RQM_OT_DuplicateJob(Operator):
                 nt = dst.stereo_tags.add()
                 nt.name = t.name
                 nt.enabled = t.enabled
+        # Copy view layer list
+        if hasattr(src, 'view_layer_list'):
+            for item in src.view_layer_list:
+                new_item = dst.view_layer_list.add()
+                new_item.name = item.name
+                new_item.enabled = item.enabled
         dst.name = src.name + '_dup'
         st.active_index = len(st.queue) - 1
         self.report({'INFO'}, 'Job duplicated.')
@@ -760,4 +808,256 @@ class RQM_OT_OpenOutputFolder(Operator):
         except Exception as e:
             self.report({'ERROR'}, str(e))
             return {'CANCELLED'}
+        return {'FINISHED'}
+
+
+# --- Feature 5: Copy Path ---
+
+class RQM_OT_CopyPath(Operator):
+    bl_idname = 'rqm.copy_path'
+    bl_label = 'Copy Path'
+    bl_description = 'Copy the file path to the clipboard'
+    bl_options = {'REGISTER'}
+
+    path: StringProperty(default='')
+
+    def execute(self, context):
+        context.window_manager.clipboard = self.path
+        self.report({'INFO'}, 'Path copied to clipboard.')
+        return {'FINISHED'}
+
+
+# --- Feature 1: View Layer UIList operators ---
+
+class RQM_OT_ViewLayerSelectAll(Operator):
+    bl_idname = 'rqm.view_layer_select_all'
+    bl_label = 'Select All View Layers'
+    bl_description = 'Enable all view layers for this job'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        st = get_state(context)
+        if not st or not (0 <= st.active_index < len(st.queue)):
+            return {'CANCELLED'}
+        job = st.queue[st.active_index]
+        for item in job.view_layer_list:
+            item.enabled = True
+        names = [item.name for item in job.view_layer_list]
+        scn = bpy.data.scenes.get(job.scene_name) if job.scene_name else None
+        if scn:
+            set_job_view_layer_names(job, scn, names)
+        self.report({'INFO'}, 'All view layers selected.')
+        return {'FINISHED'}
+
+
+class RQM_OT_ViewLayerDeselectAll(Operator):
+    bl_idname = 'rqm.view_layer_deselect_all'
+    bl_label = 'Deselect All View Layers'
+    bl_description = 'Disable all view layers for this job'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        st = get_state(context)
+        if not st or not (0 <= st.active_index < len(st.queue)):
+            return {'CANCELLED'}
+        job = st.queue[st.active_index]
+        for item in job.view_layer_list:
+            item.enabled = False
+        scn = bpy.data.scenes.get(job.scene_name) if job.scene_name else None
+        if scn:
+            set_job_view_layer_names(job, scn, [])
+        self.report({'INFO'}, 'All view layers deselected.')
+        return {'FINISHED'}
+
+
+class RQM_OT_RefreshViewLayers(Operator):
+    bl_idname = 'rqm.refresh_view_layers'
+    bl_label = 'Refresh View Layers'
+    bl_description = 'Refresh the view layer list from the scene'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        st = get_state(context)
+        if not st or not (0 <= st.active_index < len(st.queue)):
+            return {'CANCELLED'}
+        job = st.queue[st.active_index]
+        scn = bpy.data.scenes.get(job.scene_name) if job.scene_name else None
+        sync_view_layer_list_from_scene(job, scn)
+        self.report({'INFO'}, 'View layers refreshed.')
+        return {'FINISHED'}
+
+
+# --- Feature 2: Job Templates ---
+
+class RQM_OT_SaveTemplate(Operator):
+    bl_idname = 'rqm.save_template'
+    bl_label = 'Save as Template'
+    bl_description = 'Save the active job settings as a reusable template'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    template_name: StringProperty(name='Template Name', default='New Template')
+
+    def invoke(self, context, event):
+        st = get_state(context)
+        if st and 0 <= st.active_index < len(st.queue):
+            job = st.queue[st.active_index]
+            self.template_name = job.name or 'New Template'
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        st = get_state(context)
+        if not st or not (0 <= st.active_index < len(st.queue)):
+            self.report({'WARNING'}, 'No job selected.')
+            return {'CANCELLED'}
+        job = st.queue[st.active_index]
+        tmpl = st.templates.add()
+        tmpl.name = self.template_name
+        copy_job_to_template(job, tmpl)
+        st.template_index = len(st.templates) - 1
+        self.report({'INFO'}, f"Template '{self.template_name}' saved.")
+        return {'FINISHED'}
+
+
+def _template_items(self, context):
+    st = getattr(context.scene, 'rqm_state', None) if context else None
+    items = []
+    if st:
+        for i, tmpl in enumerate(st.templates):
+            items.append((str(i), tmpl.name, ''))
+    return items or [('NONE', 'No Templates', '')]
+
+
+class RQM_OT_LoadTemplate(Operator):
+    bl_idname = 'rqm.load_template'
+    bl_label = 'Load Template'
+    bl_description = 'Apply a saved template to the active job'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    template: EnumProperty(name='Template', items=_template_items)
+
+    def execute(self, context):
+        if self.template == 'NONE':
+            self.report({'WARNING'}, 'No templates available.')
+            return {'CANCELLED'}
+        st = get_state(context)
+        if not st or not (0 <= st.active_index < len(st.queue)):
+            self.report({'WARNING'}, 'No job selected.')
+            return {'CANCELLED'}
+        idx = int(self.template)
+        if not (0 <= idx < len(st.templates)):
+            self.report({'ERROR'}, 'Template not found.')
+            return {'CANCELLED'}
+        tmpl = st.templates[idx]
+        job = st.queue[st.active_index]
+        copy_template_to_job(tmpl, job)
+        self.report({'INFO'}, f"Template '{tmpl.name}' applied.")
+        return {'FINISHED'}
+
+
+class RQM_OT_DeleteTemplate(Operator):
+    bl_idname = 'rqm.delete_template'
+    bl_label = 'Delete Template'
+    bl_description = 'Delete the selected template'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        st = get_state(context)
+        if not st or not (0 <= st.template_index < len(st.templates)):
+            self.report({'WARNING'}, 'No template selected.')
+            return {'CANCELLED'}
+        name = st.templates[st.template_index].name
+        st.templates.remove(st.template_index)
+        st.template_index = min(st.template_index, len(st.templates) - 1)
+        self.report({'INFO'}, f"Template '{name}' deleted.")
+        return {'FINISHED'}
+
+
+# --- Feature 4: Indirect Toggle with Custom Selection ---
+
+class RQM_OT_ToggleIndirectSelect(Operator):
+    bl_idname = 'rqm.toggle_indirect_select'
+    bl_label = 'Toggle Indirect (Custom)'
+    bl_description = (
+        'Toggle indirect-only collections for selected view layers'
+    )
+    bl_options = {'REGISTER', 'UNDO'}
+
+    mode: EnumProperty(
+        name='Mode',
+        items=[
+            ('JOB_LAYERS', 'Job Layers', 'Toggle for the job\'s selected view layers'),
+            ('ALL_LAYERS', 'All Layers', 'Toggle for all view layers in the scene'),
+            ('CUSTOM', 'Custom', 'Choose which view layers to toggle'),
+        ],
+        default='CUSTOM',
+    )
+
+    def invoke(self, context, event):
+        st = get_state(context)
+        if not st or not (0 <= st.active_index < len(st.queue)):
+            self.report({'WARNING'}, 'No job selected.')
+            return {'CANCELLED'}
+        job = st.queue[st.active_index]
+        scn = bpy.data.scenes.get(job.scene_name) if job.scene_name else None
+        if not scn:
+            self.report({'WARNING'}, 'Job scene not found.')
+            return {'CANCELLED'}
+        # Populate the job's view_layer_list for custom selection
+        if not job.view_layer_list:
+            sync_view_layer_list_from_scene(job, scn)
+        return context.window_manager.invoke_props_dialog(self, width=300)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, 'mode')
+        if self.mode == 'CUSTOM':
+            st = get_state(context)
+            if st and 0 <= st.active_index < len(st.queue):
+                job = st.queue[st.active_index]
+                box = layout.box()
+                box.label(text='Select view layers:')
+                for item in job.view_layer_list:
+                    box.prop(item, 'enabled', text=item.name)
+
+    def execute(self, context):
+        import json
+
+        st = get_state(context)
+        if not st or not (0 <= st.active_index < len(st.queue)):
+            return {'CANCELLED'}
+        job = st.queue[st.active_index]
+        scn = bpy.data.scenes.get(job.scene_name) if job.scene_name else None
+        if not scn:
+            return {'CANCELLED'}
+
+        if self.mode == 'JOB_LAYERS':
+            vl_names = set(get_job_view_layer_names(job) or [vl.name for vl in scn.view_layers])
+        elif self.mode == 'ALL_LAYERS':
+            vl_names = {vl.name for vl in scn.view_layers}
+        else:  # CUSTOM
+            vl_names = {item.name for item in job.view_layer_list if item.enabled}
+
+        try:
+            tracked = json.loads(st.indirect_disabled_collections or '{}')
+        except Exception:
+            tracked = {}
+
+        toggled = 0
+        for vl in scn.view_layers:
+            if vl.name not in vl_names:
+                continue
+            for lc in _iter_layer_collections(vl.layer_collection):
+                if not getattr(lc, 'indirect_only', False):
+                    continue
+                key = f'{scn.name}|{vl.name}|{lc.name}'
+                if key in tracked:
+                    lc.exclude = False
+                    del tracked[key]
+                else:
+                    lc.exclude = True
+                    tracked[key] = True
+                toggled += 1
+
+        st.indirect_disabled_collections = json.dumps(tracked)
+        self.report({'INFO'}, f'Toggled {toggled} indirect-only collections.')
         return {'FINISHED'}

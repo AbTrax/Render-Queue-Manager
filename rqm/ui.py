@@ -11,7 +11,7 @@ from .comp import base_render_dir, get_compositor_node_tree, job_file_prefix, re
 from .properties import get_job_view_layer_names
 from .state import get_state
 
-__all__ = ['RQM_UL_Queue', 'RQM_UL_Outputs', 'RQM_UL_Tags', 'RQM_PT_Panel']
+__all__ = ['RQM_UL_Queue', 'RQM_UL_Outputs', 'RQM_UL_Tags', 'RQM_UL_ViewLayers', 'RQM_PT_Panel']
 
 _RENDER_EXTENSIONS = {
     'PNG': 'png',
@@ -287,6 +287,18 @@ class RQM_UL_Tags(UIList):
             layout.label(text=item.name)
 
 
+class RQM_UL_ViewLayers(UIList):
+    bl_idname = 'RQM_UL_ViewLayers'
+
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row(align=True)
+            row.prop(item, 'enabled', text='')
+            row.label(text=item.name, icon='RENDERLAYERS')
+        else:
+            layout.label(text=item.name)
+
+
 class RQM_PT_Panel(Panel):
     bl_label = 'Render Queue Manager X'
     bl_idname = 'RQM_PT_panel'
@@ -350,6 +362,13 @@ class RQM_PT_Panel(Panel):
             top_row.prop(job, 'enabled', text='')
             top_row.prop(job, 'name', text='Name')
 
+            # Template buttons
+            tmpl_row = box.row(align=True)
+            tmpl_row.operator('rqm.save_template', icon='FILE_NEW', text='Save Template')
+            tmpl_row.operator_menu_enum('rqm.load_template', 'template', text='Load Template', icon='IMPORT')
+            if len(st.templates) > 0:
+                tmpl_row.operator('rqm.delete_template', icon='TRASH', text='')
+
             if hasattr(job, 'notes'):
                 box.prop(job, 'notes', text='Notes', icon='TEXT')
 
@@ -357,28 +376,23 @@ class RQM_PT_Panel(Panel):
             row.prop(job, 'scene_name', text='Scene')
             row.prop(job, 'camera_name', text='Camera')
             if hasattr(job, 'view_layers'):
-                # Cleaner multi-select as a dropdown with dynamic label
-                row = box.row()
-                selected_count = 0
-                try:
-                    selected_names = [name for name in get_job_view_layer_names(job) if name]
-                    selected_count = len(selected_names)
-                except Exception:
-                    selected_names = []
-                if not selected_count:
-                    try:
-                        raw_sel = getattr(job, 'view_layers', set())
-                        if isinstance(raw_sel, str):
-                            selected_count = 1 if raw_sel else 0
-                        else:
-                            selected_count = len({item for item in raw_sel if item})
-                    except Exception:
-                        selected_count = 0
-                label = 'View Layers'
-                if selected_count:
-                    label = f'View Layers ({selected_count})'
-                # prop_menu_enum opens a dropdown menu where items can be toggled (ENUM_FLAG)
-                row.prop_menu_enum(job, 'view_layers', text=label, icon='DOWNARROW_HLT')
+                # Sync view layer list if empty
+                if not job.view_layer_list and scn_for_job:
+                    from .properties import sync_view_layer_list_from_scene
+                    sync_view_layer_list_from_scene(job, scn_for_job)
+                selected_count = sum(1 for item in job.view_layer_list if item.enabled)
+                total_count = len(job.view_layer_list)
+                label = f'View Layers ({selected_count}/{total_count})'
+                box.label(text=label, icon='RENDERLAYERS')
+                vl_row = box.row()
+                vl_row.template_list(
+                    'RQM_UL_ViewLayers', '', job, 'view_layer_list',
+                    job, 'view_layer_list_index', rows=3,
+                )
+                vl_side = vl_row.column(align=True)
+                vl_side.operator('rqm.view_layer_select_all', text='', icon='CHECKBOX_HLT')
+                vl_side.operator('rqm.view_layer_deselect_all', text='', icon='CHECKBOX_DEHLT')
+                vl_side.operator('rqm.refresh_view_layers', text='', icon='FILE_REFRESH')
 
             row = box.row()
             row.prop(job, 'engine', text='Render Engine')
@@ -396,8 +410,9 @@ class RQM_PT_Panel(Panel):
 
             ind_row = box.row(align=True)
             ind_row.label(text='Indirect Collections:', icon='OUTLINER_COLLECTION')
-            ind_row.operator('rqm.toggle_indirect_only', text='Toggle (Layer)')
-            ind_row.operator('rqm.toggle_indirect_only_all', text='Toggle (All)')
+            ind_row.operator('rqm.toggle_indirect_only', text='Layer')
+            ind_row.operator('rqm.toggle_indirect_only_all', text='All')
+            ind_row.operator('rqm.toggle_indirect_select', text='Custom')
 
             col = box.column(align=True)
             col.label(text='Resolution')
@@ -411,11 +426,22 @@ class RQM_PT_Panel(Panel):
                 margin_row.prop(job, 'use_margin')
                 sub_margin = margin_row.row(align=True)
                 sub_margin.enabled = getattr(job, 'use_margin', False)
-                sub_margin.prop(job, 'margin', text='Margin (px)')
-                if getattr(job, 'use_margin', False) and job.margin > 0:
-                    eff_x = job.res_x + job.margin * 2
-                    eff_y = job.res_y + job.margin * 2
-                    col.label(text=f'Effective: {eff_x} x {eff_y}', icon='INFO')
+                if getattr(job, 'use_separate_margins', False):
+                    sub_margin.prop(job, 'margin_x', text='X')
+                    sub_margin.prop(job, 'margin_y', text='Y')
+                else:
+                    sub_margin.prop(job, 'margin', text='Margin (px)')
+                if getattr(job, 'use_margin', False):
+                    sep_row = col.row(align=True)
+                    sep_row.prop(job, 'use_separate_margins')
+                    if getattr(job, 'use_separate_margins', False):
+                        mx, my = job.margin_x, job.margin_y
+                    else:
+                        mx = my = job.margin
+                    if mx > 0 or my > 0:
+                        eff_x = job.res_x + mx * 2
+                        eff_y = job.res_y + my * 2
+                        col.label(text=f'Effective: {eff_x} x {eff_y}', icon='INFO')
 
             col.separator()
             col.prop(job, 'use_animation')
@@ -456,7 +482,10 @@ class RQM_PT_Panel(Panel):
                 col.prop(job, 'prefix_files_with_job_name')
             preview = _standard_output_preview(job)
             if preview:
-                col.label(text=f'Example file: {preview}', icon='FILE')
+                prev_row = col.row(align=True)
+                prev_row.label(text=f'Example file: {preview}', icon='FILE')
+                cp = prev_row.operator('rqm.copy_path', text='', icon='COPYDOWN')
+                cp.path = preview
             enc_box = col.box()
             enc_box.label(text='Encoding', icon='COLOR')
             _draw_encoding_controls(enc_box, getattr(job, 'encoding', None), job.file_format)
@@ -496,6 +525,7 @@ class RQM_PT_Panel(Panel):
                 )
                 col2 = row.column(align=True)
                 col2.operator('rqm.output_add', icon='ADD', text='')
+                col2.operator('rqm.output_add_all', icon='IMPORT', text='')
                 col2.operator('rqm.output_remove', icon='REMOVE', text='')
                 col2.separator()
                 up = col2.operator('rqm.output_move', icon='TRIA_UP', text='')
@@ -548,6 +578,9 @@ class RQM_PT_Panel(Panel):
                     sub.prop(out, 'ensure_dirs')
                     preview = _compositor_output_preview(job, out, scn_for_job)
                     if preview:
-                        sub.label(text=f'Example file: {preview}', icon='FILE')
+                        cprev_row = sub.row(align=True)
+                        cprev_row.label(text=f'Example file: {preview}', icon='FILE')
+                        ccp = cprev_row.operator('rqm.copy_path', text='', icon='COPYDOWN')
+                        ccp.path = preview
 
         _draw_queue_controls(layout, st)
